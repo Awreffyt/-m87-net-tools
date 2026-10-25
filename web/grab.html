@@ -76,17 +76,17 @@
   </div>
 
   <div class="tip">
-    <b>说明：</b>本页是纯静态页面，靠公开的跨域代理去取目标网页，所以不需要服务器、不需要安装、随时可打开。<br>
+    <b>说明：</b>本页是纯静态页面，优先借用第三方公开抓取接口取网页，失败时自动切换备用代理，不需要服务器、不需要安装。<br>
     动态加载（滚动后才出现的图片）和需要登录的内容抓不到，少数站点会拒绝代理访问。多试一次或换个网址即可。
   </div>
 </div>
 
 <script>
 var PROXIES = [
+  function (u) { return 'https://xmokyimajkzuvbzbyqqb.supabase.co/functions/v1/site-tools?action=fetch&url=' + encodeURIComponent(u); },
   function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
   function (u) { return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u); },
-  function (u) { return 'https://corsproxy.io/?url=' + encodeURIComponent(u); },
-  function (u) { return 'https://api.cors.lol/?url=' + encodeURIComponent(u); }
+  function (u) { return 'https://corsproxy.io/?url=' + encodeURIComponent(u); }
 ];
 
 var CATS = ['图片', '脚本', '样式', '字体', '媒体', '框架', '链接', '接口'];
