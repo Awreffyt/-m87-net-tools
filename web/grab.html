@@ -83,8 +83,8 @@
 
 <script>
 var PROXIES = [
-  function (u) { return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u); },
   function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
+  function (u) { return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u); },
   function (u) { return 'https://corsproxy.io/?url=' + encodeURIComponent(u); },
   function (u) { return 'https://api.cors.lol/?url=' + encodeURIComponent(u); }
 ];
@@ -121,7 +121,7 @@ async function fetchText(url) {
   for (var i = 0; i < PROXIES.length; i++) {
     try {
       var ctrl = new AbortController();
-      var timer = setTimeout(function () { ctrl.abort(); }, 25000);
+      var timer = setTimeout(function () { ctrl.abort(); }, 14000);
       var r = await fetch(PROXIES[i](url), { signal: ctrl.signal, cache: 'no-store' });
       clearTimeout(timer);
       if (!r.ok) { lastErr = 'HTTP ' + r.status; continue; }
