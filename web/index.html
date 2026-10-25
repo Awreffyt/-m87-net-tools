@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#070a0f" />
+<title>M87 网络抓包工具</title>
+<link rel="stylesheet" href="/static/styles.css?v=1.8" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round">
+        <circle cx="12" cy="12" r="5.6"></circle>
+        <ellipse cx="12" cy="12" rx="10" ry="3.2" transform="rotate(-18 12 12)"></ellipse>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <h1>M87</h1>
+      <p>网络抓包与诊断工具</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="pill" id="serverPill"><span class="dot"></span><span id="serverPillText">连接中</span></div>
+    <a class="ghost-btn" href="/api/docs" target="_blank" rel="noreferrer" style="height:30px;padding:0 12px;font-size:11.5px;border-radius:9px">API 文档</a>
+  </div>
+</header>
+
+<nav class="tabs" id="mainTabs">
+  <button class="tab active" data-view="probe">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.4 4 5.6 4 9s-1.5 6.6-4 9c-2.5-2.4-4-5.6-4-9s1.5-6.6 4-9z"/></svg>
+    站点探测
+  </button>
+  <button class="tab" data-view="extract">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.5v9.7a2 2 0 0 1-1.1 1.8l-7 3.4a2 2 0 0 1-1.8 0l-7-3.4A2 2 0 0 1 3 18.2V8.5"/><path d="M3.3 7.4l8-3.9a2 2 0 0 1 1.4 0l8 3.9-8.7 4.2a2 2 0 0 1-1.2 0z"/><path d="M12 12.5V22"/></svg>
+    资源提取
+  </button>
+  <button class="tab" data-view="dns">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
+    DNS 查询
+  </button>
+  <button class="tab" data-view="capture">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12h4l2.2-6 3.4 13 2.6-8 1.8 4h5.5"/></svg>
+    抓包分析
+  </button>
+  <div class="tab-ink" id="tabInk"></div>
+</nav>
+
+<main class="main">
+
+  <!-- ================= 站点探测 ================= -->
+  <section class="view active" id="view-probe">
+    <div class="tool-wrap">
+      <div class="hero">
+        <h2>站点探测</h2>
+        <p>一次请求看清站点健康度：DNS 解析、HTTP / HTTPS 连通性、重定向链、TLS 证书与安全响应头，并给出评分与整改建议。</p>
+      </div>
+
+      <div class="search-row">
+        <div class="input-shell">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.4 4 5.6 4 9s-1.5 6.6-4 9c-2.5-2.4-4-5.6-4-9s1.5-6.6 4-9z"/></svg>
+          <input id="probeInput" placeholder="输入域名或网址，例如 github.com" autocomplete="off" spellcheck="false" />
+          <button class="mini-clear" id="probeClear" title="清空输入"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div>
+        <button class="primary-btn" id="probeBtn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+          开始探测
+        </button>
+        <button class="ghost-btn" id="probeBatchBtn" title="批量探测多个站点">批量</button>
+      </div>
+
+      <div class="examples" id="probeExamples">
+        <span class="label">示例</span>
+        <button class="chip" data-url="github.com">github.com</button>
+        <button class="chip" data-url="example.com">example.com</button>
+        <button class="chip" data-url="cloudflare.com">cloudflare.com</button>
+        <button class="chip" data-url="baidu.com">baidu.com</button>
+      </div>
+
+      <details class="help">
+        <summary>第一次用？点这里看结果怎么读</summary>
+        <div class="help-body">
+          <p>评分 90 以上表示基础配置良好，70 到 89 表示有可优化项，低于 70 建议按整改建议逐条处理。</p>
+          <p>安全响应头用于防止点击劫持、跨站脚本和内容嗅探等常见问题，缺失的项目会在下方单独列出。</p>
+          <p>TLS 证书会显示签发机构、到期时间和剩余天数，剩余不足 15 天建议尽快续期。</p>
+        </div>
+      </details>
+
+      <div id="probeBatchBox" class="hidden" style="margin-top:12px">
+        <div class="card">
+          <div class="card-title">批量探测 <span class="right">每行一个网址，最多 12 个</span></div>
+          <textarea id="probeBatchInput" rows="4" placeholder="github.com&#10;example.com&#10;cloudflare.com" style="width:100%;background:#0a111b;border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;outline:none;font-family:var(--mono);font-size:12px;resize:vertical"></textarea>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="primary-btn" id="probeBatchRun" style="height:36px;padding:0 16px;font-size:12px">开始批量</button>
+            <button class="ghost-btn" id="probeBatchClose" style="height:36px;font-size:12px">收起</button>
+          </div>
+        </div>
+        <div id="probeBatchResults"></div>
+      </div>
+
+      <div id="probeError" class="alert hidden"></div>
+
+      <div class="empty-state" id="probeEmpty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="9.2"/><path d="M3 12h18M12 2.8c2.6 2.5 4.2 5.8 4.2 9.2S14.6 18.7 12 21.2c-2.6-2.5-4.2-5.8-4.2-9.2S9.4 5.3 12 2.8z"/></svg>
+        <h3>输入网址开始检测</h3>
+        <p>会同时检测 HTTP 与 HTTPS、记录每一次跳转、读取 TLS 证书，并审计 7 项关键安全响应头。</p>
+      </div>
+
+      <div class="loading-state hidden" id="probeLoading">
+        <div class="skel" style="height:104px"></div>
+        <div class="skel" style="height:150px"></div>
+        <div class="skel" style="height:150px"></div>
+      </div>
+
+      <div id="probeResult" class="hidden">
+        <div class="card result-head">
+          <div class="score-ring" id="probeScore"><b>0</b></div>
+          <div class="result-meta">
+            <div class="result-title">
+              <img class="fav hidden" id="probeFavicon" alt="" />
+              <span class="host" id="probeTarget">-</span>
+              <span class="badge" id="probeGrade">-</span>
+            </div>
+            <div class="chips" id="probeChips"></div>
+            <div class="meta-line" id="probeMeta"></div>
+          </div>
+          <div class="result-actions">
+            <button class="ghost-btn" id="probeReprobe">重新探测</button>
+            <button class="ghost-btn" id="probeCopy">复制报告</button>
+            <button class="ghost-btn" id="probeExport">导出 JSON</button>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card" id="probeDnsCard"></div>
+          <div class="card" id="probeTlsCard"></div>
+        </div>
+
+        <div class="card" id="probeEndpoints"></div>
+        <div class="card" id="probeSecurityCard"></div>
+        <div class="card" id="probeHintsCard"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 资源提取 ================= -->
+  <section class="view" id="view-extract">
+    <div class="tool-wrap wide">
+      <div class="hero">
+        <h2>资源提取</h2>
+        <p>抓取页面并拆出图片、视频、音频、链接、脚本、样式、字体与内嵌框架。点「顺藤摸瓜」可递归抓取同域内链，并深挖 CSS / JS 里的隐藏资源，最后一键打包带走。</p>
+      </div>
+
+      <div class="search-row">
+        <div class="input-shell">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"/></svg>
+          <input id="extractInput" placeholder="输入页面地址，例如 https://example.com" autocomplete="off" spellcheck="false" />
+          <button class="mini-clear" id="extractClear" title="清空输入"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div>
+        <button class="primary-btn" id="extractBtn">开始提取</button>
+        <select id="deepDepth" class="mini-select" title="递归深度">
+          <option value="1">深 1 层</option>
+          <option value="2" selected>深 2 层</option>
+          <option value="3">深 3 层</option>
+          <option value="4">深 4 层</option>
+        </select>
+        <button class="ghost-btn" id="deepBtn" style="color:#a78bfa;border-color:rgba(167,139,250,.45)">顺藤摸瓜</button>
+      </div>
+
+      <div class="examples" id="extractExamples">
+        <span class="label">示例</span>
+        <button class="chip" data-url="example.com">example.com</button>
+        <button class="chip" data-url="developer.mozilla.org">developer.mozilla.org</button>
+        <button class="chip" data-url="github.com">github.com</button>
+        <button class="chip" data-url="www.python.org">www.python.org</button>
+      </div>
+
+      <details class="help">
+        <summary>第一次用？点这里看怎么打包资源</summary>
+        <div class="help-body">
+          <p>输入页面地址后，服务端会抓取页面并解析出八类资源，相对路径会自动补全为完整地址。</p>
+          <p>勾选需要的资源，点击「打包 ZIP」，浏览器会下载一个包含全部文件的压缩包。</p>
+          <p><b>顺藤摸瓜</b>：从入口页出发，按选定深度递归抓取同域内链的所有页面，同时解析每个页面的 CSS 与 JS，把里面引用的图片、字体、接口等隐藏资源一并挖出。适合对付懒加载、CSS 背景图、JS 动态拼接路径等场景。</p>
+          <p>页面预览是静态快照，脚本与外部交互已禁用，只用于查看结构。</p>
+        </div>
+      </details>
+
+      <div id="extractError" class="alert hidden"></div>
+
+      <div class="empty-state" id="extractEmpty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.5v9.7a2 2 0 0 1-1.1 1.8l-7 3.4a2 2 0 0 1-1.8 0l-7-3.4A2 2 0 0 1 3 18.2V8.5"/><path d="M3.3 7.4l8-3.9a2 2 0 0 1 1.4 0l8 3.9-8.7 4.2a2 2 0 0 1-1.2 0z"/><path d="M12 12.5V22"/></svg>
+        <h3>输入页面地址开始提取</h3>
+        <p>服务端抓取并解析 HTML，自动补全相对路径；图片支持缩略图直接预览，可勾选后一键打成一个 ZIP 包。</p>
+      </div>
+
+      <div class="loading-state hidden" id="extractLoading">
+        <div class="skel" style="height:96px"></div>
+        <div class="skel" style="height:120px"></div>
+        <div class="skel" style="height:220px"></div>
+      </div>
+
+      <div id="extractResult" class="hidden">
+        <div class="card page-card">
+          <div class="page-fav" id="pageFavicon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.4 4 5.6 4 9s-1.5 6.6-4 9c-2.5-2.4-4-5.6-4-9s1.5-6.6 4-9z"/></svg>
+          </div>
+          <div class="page-info">
+            <h3 id="pageTitle">-</h3>
+            <div class="page-url" id="pageUrl"></div>
+            <div class="page-desc" id="pageDesc"></div>
+            <div class="page-meta" id="pageMeta"></div>
+          </div>
+          <div class="result-actions">
+            <button class="ghost-btn" id="pageOpen">打开原页</button>
+            <button class="ghost-btn" id="pageReport">导出报告</button>
+          </div>
+        </div>
+
+        <div id="deepPages" class="deep-pages hidden">
+          <div class="deep-pages-head">
+            <span>顺藤摸瓜已抓取 <b id="deepPageCount">0</b> 个页面</span>
+            <span class="dim" id="deepHint">同域内链递归抓取，资源已汇总到下方</span>
+          </div>
+          <div class="deep-pages-list" id="deepPagesList"></div>
+        </div>
+
+        <div class="sub-tabs" id="extractTabs">
+          <button class="sub-tab active" data-tab="resources">资源 <span class="num" id="resTotal">0</span></button>
+          <button class="sub-tab" data-tab="source">源码</button>
+          <button class="sub-tab" data-tab="preview">页面预览</button>
+        </div>
+
+        <div class="sub-panel active" id="extract-resources">
+          <div class="res-toolbar">
+            <div id="resChips" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+            <div class="spacer"></div>
+            <div class="input-shell">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+              <input id="resSearch" placeholder="筛选资源" autocomplete="off" />
+            </div>
+            <span class="meta" id="resSelectedMeta">已选 0</span>
+            <button class="ghost-btn" id="resSelectAll">全选</button>
+            <button class="ghost-btn" id="resCopy">复制链接</button>
+            <button class="ghost-btn" id="resCsv">CSV</button>
+            <button class="ghost-btn" id="resJson">JSON</button>
+            <button class="ghost-btn" id="resZip" style="color:#7dd3fc;border-color:rgba(56,189,248,.4)">打包 ZIP</button>
+          </div>
+          <div id="resourceList"></div>
+        </div>
+
+        <div class="sub-panel" id="extract-source">
+          <div class="code-toolbar">
+            <button class="ghost-btn" id="sourceCopy">复制源码</button>
+            <button class="ghost-btn" id="sourceDownload">下载 HTML</button>
+            <span class="meta" id="sourceMeta" style="font-size:11px;color:var(--dim)"></span>
+          </div>
+          <pre class="code-view" id="sourceCode"></pre>
+        </div>
+
+        <div class="sub-panel" id="extract-preview">
+          <div class="alert info" style="margin-top:0;margin-bottom:10px">预览为静态快照，脚本与外部交互已被禁用，部分样式可能无法加载。</div>
+          <iframe class="preview-frame" id="previewFrame" sandbox="allow-same-origin" referrerpolicy="no-referrer"></iframe>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= DNS 查询 ================= -->
+  <section class="view" id="view-dns">
+    <div class="tool-wrap">
+      <div class="hero">
+        <h2>DNS 查询</h2>
+        <p>支持 A / AAAA / MX / TXT / NS / CNAME / SOA / CAA 记录与 IP 反查（PTR），可切换 DoH 解析器，并做多解析器一致性对比。</p>
+      </div>
+
+      <div class="search-row">
+        <div class="input-shell">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
+          <input id="dnsInput" placeholder="输入域名或 IP，例如 github.com" autocomplete="off" spellcheck="false" />
+          <button class="mini-clear" id="dnsClear" title="清空输入"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div>
+        <button class="primary-btn" id="dnsBtn">查询</button>
+      </div>
+
+      <div class="dns-controls">
+        <div class="type-chips" id="dnsTypeChips">
+          <button class="chip active" data-type="ALL">ALL</button>
+          <button class="chip" data-type="A">A</button>
+          <button class="chip" data-type="AAAA">AAAA</button>
+          <button class="chip" data-type="MX">MX</button>
+          <button class="chip" data-type="TXT">TXT</button>
+          <button class="chip" data-type="NS">NS</button>
+          <button class="chip" data-type="CNAME">CNAME</button>
+          <button class="chip" data-type="SOA">SOA</button>
+          <button class="chip" data-type="CAA">CAA</button>
+        </div>
+        <div class="spacer"></div>
+        <div class="select-shell">
+          <select id="dnsResolver">
+            <option value="alidns">阿里 DNS (223.5.5.5)</option>
+            <option value="cloudflare">Cloudflare (1.1.1.1)</option>
+            <option value="google">Google (8.8.8.8)</option>
+            <option value="system">系统解析器</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="examples" id="dnsExamples">
+        <span class="label">示例</span>
+        <button class="chip" data-url="github.com">github.com</button>
+        <button class="chip" data-url="example.com">example.com</button>
+        <button class="chip" data-url="cloudflare.com">cloudflare.com</button>
+        <button class="chip" data-url="8.8.8.8">8.8.8.8 反查</button>
+      </div>
+
+      <details class="help">
+        <summary>看不懂记录类型？点这里</summary>
+        <div class="help-body">
+          <p><b>A</b> 域名对应的 IPv4 地址，最常见。</p>
+          <p><b>AAAA</b> 域名对应的 IPv6 地址。</p>
+          <p><b>MX</b> 邮件服务器地址，数字越小优先级越高。</p>
+          <p><b>TXT</b> 文本记录，常用于域名所有权验证和邮件反垃圾配置。</p>
+          <p><b>NS</b> 这个域名由哪些 DNS 服务器负责解析。</p>
+          <p><b>CNAME</b> 别名，把域名指向另一个域名。</p>
+          <p><b>SOA</b> 域名的基础管理信息，包括主服务器和管理员邮箱。</p>
+          <p><b>CAA</b> 允许哪些证书机构为该域名签发证书。</p>
+          <p><b>PTR</b> 反向解析，用 IP 地址查对应域名。</p>
+        </div>
+      </details>
+
+      <div id="dnsError" class="alert hidden"></div>
+
+      <div class="empty-state" id="dnsEmpty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
+        <h3>输入域名开始查询</h3>
+        <p>使用 DNS over HTTPS，结果更接近真实解析；输入 IP 会自动切换为 PTR 反向解析。</p>
+      </div>
+
+      <div class="loading-state hidden" id="dnsLoading">
+        <div class="skel" style="height:90px"></div>
+        <div class="skel" style="height:200px"></div>
+      </div>
+
+      <div id="dnsResult" class="hidden">
+        <div class="summary-strip">
+          <div class="summary-cell"><div class="label">记录数</div><div class="value" id="dnsTotal">0</div></div>
+          <div class="summary-cell"><div class="label">类型</div><div class="value small" id="dnsTypes">-</div></div>
+          <div class="summary-cell"><div class="label">解析器</div><div class="value small" id="dnsResolverLabel">-</div></div>
+          <div class="summary-cell"><div class="label">耗时</div><div class="value" id="dnsQueryMs">0<small style="font-size:10px;color:var(--dim)">ms</small></div></div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <div class="card-title">
+            解析记录
+            <span class="right" id="dnsRecordMeta"></span>
+          </div>
+          <div class="type-chips" id="dnsRecordFilter" style="margin-bottom:10px"></div>
+          <div class="record-table-wrap">
+            <table class="record-table">
+              <thead><tr><th>类型</th><th>名称</th><th>TTL</th><th>数据</th><th></th></tr></thead>
+              <tbody id="dnsRecords"></tbody>
+            </table>
+          </div>
+          <div id="dnsNoRecords" class="hidden" style="padding:18px;text-align:center;color:var(--dim);font-size:12px">没有查询到该类型的记录</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            多解析器一致性
+            <span class="right"><button class="ghost-btn" id="dnsPropBtn" style="height:28px;padding:0 10px;font-size:11px;border-radius:7px">开始对比</button></span>
+          </div>
+          <div class="prop-grid" id="dnsPropList">
+            <div style="font-size:11.5px;color:var(--dim);line-height:1.6">点击「开始对比」，将同时向阿里 DNS、Cloudflare、Google 查询当前域名，检查解析结果是否一致。</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="ghost-btn" id="dnsCopy">复制结果</button>
+          <button class="ghost-btn" id="dnsJson">导出 JSON</button>
+          <button class="ghost-btn" id="dnsCsv">导出 CSV</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 抓包分析 ================= -->
+  <section class="view" id="view-capture">
+    <div class="capture-shell">
+      <div class="cap-toolbar">
+        <div class="cap-row">
+          <div class="select-shell">
+            <select id="ifaceSelect"><option value="demo">演示流量</option></select>
+          </div>
+          <button class="primary-btn" id="startBtn">开始抓包</button>
+          <button class="ghost-btn" id="demoBtn">演示抓包</button>
+          <span class="cap-status" id="capStatus"><span class="dot"></span><span id="capStatusText">未开始</span></span>
+          <div class="spacer"></div>
+          <input type="file" id="importFile" accept=".pcap,.pcapng" hidden />
+          <button class="ghost-btn" id="importBtn">导入 pcap</button>
+          <button class="ghost-btn" id="exportBtn">导出 pcap</button>
+          <button class="ghost-btn danger" id="deleteBtn">删除会话</button>
+        </div>
+        <div class="cap-row filter-row">
+          <div class="input-shell filter-shell">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>
+            <input id="filterInput" placeholder="显示过滤器：tcp.port == 443 && !dns，回车应用" autocomplete="off" spellcheck="false" />
+            <button class="mini-clear" id="filterClear" title="清空过滤器"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          </div>
+          <div class="quick-chips" id="quickFilters">
+            <button data-filter="">全部</button>
+            <button data-filter="tcp">tcp</button>
+            <button data-filter="udp">udp</button>
+            <button data-filter="dns">dns</button>
+            <button data-filter="http">http</button>
+            <button data-filter="tls">tls</button>
+            <button data-filter="icmp">icmp</button>
+            <button data-filter="arp">arp</button>
+            <button data-filter="ipv6">ipv6</button>
+          </div>
+          <details class="help inline">
+            <summary>写法说明</summary>
+            <div class="help-body">
+              <p>只写协议名即可筛选，例如 tcp、dns、http、mqtt。</p>
+              <p>支持的协议名：tcp、udp、dns、mdns、llmnr、http、http2、tls、dhcp、ntp、arp、icmp、ftp、telnet、smtp、ssh、mqtt、redis、memcached、mysql、postgres、ldap、smb、modbus、stun、snmp、syslog、tftp、sip、quic、wireguard、rtp。</p>
+              <p>按端口筛选：tcp.port == 443。</p>
+              <p>按地址筛选：ip.addr == 8.8.8.8。</p>
+              <p>组合条件：tcp.port == 443 &amp;&amp; !dns。</p>
+            </div>
+          </details>
+          <div class="spacer"></div>
+          <label class="switch"><input type="checkbox" id="autoScroll" checked /> 自动滚动</label>
+        </div>
+      </div>
+
+      <div class="cap-body">
+        <aside class="sessions-panel">
+          <div class="panel-head">会话 <span id="sessionCount">0</span></div>
+          <div class="session-list" id="sessionList"></div>
+        </aside>
+
+        <div class="cap-main">
+          <div class="packet-area">
+            <div class="view-tabs">
+              <button data-ctab="packets" class="active">数据包 <span class="num" id="packetCount">0</span></button>
+              <button data-ctab="stats">统计</button>
+              <div class="spacer"></div>
+              <span class="hint" id="packetHint"></span>
+            </div>
+
+            <div class="ctab active" id="ctab-packets">
+              <div class="packet-table-wrap" id="packetTableWrap">
+                <table class="packet-table">
+                  <colgroup>
+                    <col class="col-num" /><col class="col-time" /><col class="col-src" />
+                    <col class="col-dst" /><col class="col-proto" /><col class="col-len" /><col />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>序号</th><th>时间</th><th>源地址</th><th>目的地址</th>
+                      <th>协议</th><th>长度</th><th>信息</th>
+                    </tr>
+                  </thead>
+                  <tbody id="packetBody"></tbody>
+                </table>
+                <div class="table-empty" id="packetEmpty">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12h4l2.2-6 3.4 13 2.6-8 1.8 4h5.5"/></svg>
+                  <span id="packetEmptyText">还没有数据包</span>
+                  <div class="empty-steps">
+                    <span>1. 选择网卡，或直接用演示流量</span>
+                    <span>2. 点击开始抓包</span>
+                    <span>3. 点击任意一行，查看协议详情</span>
+                  </div>
+                </div>
+              </div>
+              <div class="pager">
+                <button id="prevPage" disabled>上一页</button>
+                <span id="pageInfo">第 1 页</span>
+                <button id="nextPage" disabled>下一页</button>
+                <div class="spacer"></div>
+                <span id="pageStat"></span>
+              </div>
+            </div>
+
+            <div class="ctab" id="ctab-stats">
+              <div class="stats-scroll" id="statsScroll">
+                <div class="stat-cards" id="statCards"></div>
+                <div class="card chart-card">
+                  <div class="card-title">流量时间线 <span class="right" id="timelineMeta"></span></div>
+                  <div class="chart-canvas-wrap"><canvas id="timelineChart"></canvas></div>
+                </div>
+                <div class="stats-grid-2">
+                  <div class="card">
+                    <div class="card-title">协议分布</div>
+                    <div class="proto-bars" id="protoBars"></div>
+                  </div>
+                  <div class="card">
+                    <div class="card-title">Top Talkers</div>
+                    <div class="mini-table-wrap" style="overflow:auto"><table class="mini-table"><thead><tr><th>地址</th><th>包数</th><th>字节</th></tr></thead><tbody id="talkersBody"></tbody></table></div>
+                  </div>
+                </div>
+                <div class="card">
+                  <div class="card-title">TCP 会话 <span class="right" id="convMeta"></span></div>
+                  <div style="overflow:auto"><table class="mini-table"><thead><tr><th>A 端</th><th>B 端</th><th>协议</th><th>包数</th><th>字节</th></tr></thead><tbody id="convBody"></tbody></table></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="detail-panel" id="detailPanel">
+            <div class="detail-resizer" id="detailResizer"></div>
+            <div class="detail-head">
+              <span class="d-title" id="detailTitle">未选择数据包</span>
+              <div class="spacer"></div>
+              <div class="detail-tabs" id="detailTabs">
+                <button data-dtab="tree" class="active">协议树</button>
+                <button data-dtab="hex">十六进制</button>
+                <button data-dtab="follow">跟随流</button>
+                <button data-dtab="ai">AI 分析</button>
+              </div>
+              <button class="icon-btn" id="detailClose" title="关闭详情"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            </div>
+            <div class="detail-body">
+              <div class="dtab active" id="dtab-tree">
+                <div class="detail-placeholder">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+                  在左侧数据包列表中点击一行查看协议详情
+                </div>
+              </div>
+              <div class="dtab" id="dtab-hex"></div>
+              <div class="dtab" id="dtab-follow"></div>
+              <div class="dtab" id="dtab-ai"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cap-footer">
+        <span id="capFooterInfo">未选择会话</span>
+        <span class="spacer"></span>
+        <span id="capFooterFilter"></span>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast"><span class="t-dot"></span><span id="toastMsg"></span></div>
+
+<script src="/static/js/common.js?v=1.8"></script>
+<script src="/static/js/probe.js?v=1.8"></script>
+<script src="/static/js/extract.js?v=1.8"></script>
+<script src="/static/js/dns.js?v=1.8"></script>
+<script src="/static/js/capture.js?v=1.8"></script>
+<script src="/static/js/app.js?v=1.8"></script>
+</body>
+</html>

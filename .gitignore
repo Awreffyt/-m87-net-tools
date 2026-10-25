@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+data/sessions/*.pcap
+data/sessions/*.json
+*.log
+.DS_Store
+.idea/
+.vscode/
