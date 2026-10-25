@@ -3,81 +3,154 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>M87 资源抓取</title>
+<meta name="theme-color" content="#0b0e14">
+<title>M87 网页分析</title>
 <style>
   :root { --bg:#0b0e14; --panel:#131720; --line:#242a36; --text:#e6edf3; --dim:#8b96a8;
-          --accent:#2f81f7; --green:#2ea043; --warn:#d29922; }
+          --accent:#2f81f7; --green:#2ea043; --warn:#d29922; --red:#f85149; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  body { margin:0; padding:18px 14px 60px; background:var(--bg); color:var(--text);
+  body { margin:0; padding:16px 12px 80px; background:var(--bg); color:var(--text);
          font:15px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
-  .wrap { max-width:760px; margin:0 auto; }
-  h1 { font-size:20px; margin:0 0 4px; letter-spacing:.5px; }
-  .sub { color:var(--dim); font-size:12.5px; margin-bottom:18px; }
+  .wrap { max-width:780px; margin:0 auto; }
+  h1 { font-size:19px; margin:0 0 3px; }
+  .sub { color:var(--dim); font-size:12.5px; margin-bottom:14px; }
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px;
-           padding:14px; margin-bottom:14px; }
-  label { display:block; font-size:13px; color:var(--dim); margin-bottom:6px; }
-  input[type=text] { width:100%; padding:12px; border-radius:8px; border:1px solid var(--line);
-                     background:#0d1117; color:var(--text); font-size:15px; outline:none; }
-  input[type=text]:focus { border-color:var(--accent); }
-  .row { display:flex; gap:10px; align-items:center; margin-top:10px; flex-wrap:wrap; }
-  .row label { margin:0; display:flex; align-items:center; gap:6px; font-size:13px; }
-  button { border:0; border-radius:8px; padding:13px 18px; font-size:15px; font-weight:600;
-           cursor:pointer; color:#fff; background:var(--accent); }
+           padding:12px; margin-bottom:12px; }
+  textarea { width:100%; min-height:70px; padding:11px; border-radius:8px; border:1px solid var(--line);
+             background:#0d1117; color:var(--text); font-size:14px; outline:none; resize:vertical;
+             font-family:ui-monospace, Consolas, monospace; }
+  textarea:focus, input[type=text]:focus, input[type=number]:focus, select:focus { border-color:var(--accent); }
+  input[type=text], input[type=number], select {
+    padding:10px; border-radius:8px; border:1px solid var(--line); background:#0d1117;
+    color:var(--text); font-size:14px; outline:none; font-family:inherit; }
+  .opts { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-top:10px; font-size:12.5px; color:var(--dim); }
+  .opts label { display:flex; align-items:center; gap:6px; }
+  .opts input[type=checkbox] { accent-color:var(--accent); width:15px; height:15px; }
+  .opts input[type=number] { width:64px; padding:6px 8px; }
+  button { border:0; border-radius:8px; padding:12px 16px; font-size:14px; font-weight:600;
+           cursor:pointer; color:#fff; background:var(--accent); font-family:inherit; }
   button:active { opacity:.82; }
-  button:disabled { opacity:.45; cursor:default; }
-  .btn-main { width:100%; margin-top:12px; padding:15px; font-size:16px; }
-  .btn-sec { background:#21262d; color:var(--text); font-weight:500; font-size:13px; padding:10px 14px; }
-  .status { font-size:13px; color:var(--dim); margin-top:12px; min-height:20px; }
-  .status.err { color:#f85149; }
+  button:disabled { opacity:.45; }
+  .btn-main { width:100%; margin-top:12px; padding:14px; font-size:15px; }
+  .btn-sec { background:#21262d; color:var(--text); font-weight:500; font-size:12.5px; padding:9px 12px; }
+  .status { font-size:12.5px; color:var(--dim); margin:8px 0; min-height:18px; }
+  .status.err { color:var(--red); }
   .status.ok { color:var(--green); }
-  .group { margin-bottom:14px; }
-  .group-head { display:flex; justify-content:space-between; align-items:center;
-                padding:10px 12px; background:var(--panel); border:1px solid var(--line);
-                border-radius:8px 8px 0 0; cursor:pointer; font-size:13.5px; }
-  .group-head b { font-weight:600; }
-  .group-head span { color:var(--dim); font-size:12.5px; }
-  .group-body { border:1px solid var(--line); border-top:0; border-radius:0 0 8px 8px;
-                max-height:320px; overflow:auto; background:#0d1117; }
-  .item { display:flex; gap:9px; padding:8px 12px; border-bottom:1px solid #161b22;
-          font-size:12px; align-items:flex-start; }
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:10px; overflow-x:auto; }
+  .tabs button { background:transparent; color:var(--dim); border-radius:8px 8px 0 0; padding:9px 14px;
+                 font-size:13px; font-weight:500; white-space:nowrap; }
+  .tabs button.on { background:var(--panel); color:var(--text); border:1px solid var(--line); border-bottom-color:var(--panel); margin-bottom:-1px; }
+  .tools { display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+  .tools input[type=text] { flex:1; min-width:140px; }
+  .tools select { flex:0 0 auto; }
+  .count { font-size:12px; color:var(--dim); white-space:nowrap; }
+  .group { margin-bottom:10px; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .group-head { display:flex; justify-content:space-between; padding:9px 12px; background:var(--panel);
+                font-size:13px; cursor:pointer; }
+  .group-head span { color:var(--dim); font-size:12px; }
+  .group-body { max-height:340px; overflow:auto; background:#0d1117; }
+  .item { display:flex; gap:8px; padding:7px 10px; border-bottom:1px solid #161b22; font-size:12px; align-items:flex-start; }
   .item:last-child { border-bottom:0; }
   .item input { margin-top:3px; accent-color:var(--accent); flex:0 0 auto; }
   .item a { color:#7ee787; text-decoration:none; word-break:break-all; line-height:1.5; }
-  .item a:hover { text-decoration:underline; }
-  .bar { position:sticky; bottom:0; display:flex; gap:8px; padding:12px 0 0;
-         background:linear-gradient(180deg, transparent, var(--bg) 30%); }
+  .thumb { width:38px; height:38px; object-fit:cover; border-radius:5px; background:#161b22;
+           flex:0 0 auto; border:1px solid var(--line); }
+  .meta-row { display:flex; gap:10px; padding:8px 10px; border-bottom:1px solid #161b22; font-size:13px; }
+  .meta-row:last-child { border-bottom:0; }
+  .meta-k { color:var(--dim); flex:0 0 92px; font-size:12px; }
+  .meta-v { flex:1; word-break:break-all; }
+  pre { background:#0d1117; border:1px solid var(--line); border-radius:8px; padding:12px; margin:0;
+        font:12px/1.6 ui-monospace, Consolas, monospace; color:#c9d1d9; white-space:pre-wrap;
+        word-break:break-all; max-height:62vh; overflow:auto; }
+  .bar { position:sticky; bottom:0; display:flex; gap:8px; padding:10px 0 0;
+         background:linear-gradient(180deg, transparent, var(--bg) 40%); }
   .bar button { flex:1; }
-  .empty { color:var(--dim); font-size:13px; text-align:center; padding:30px 0; }
+  .empty { color:var(--dim); font-size:13px; text-align:center; padding:26px 0; }
+  .dnsform { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .dnsform input { flex:1; min-width:150px; }
+  .dns-out { font:12px/1.7 ui-monospace, Consolas, monospace; }
+  .dns-line { padding:6px 10px; border-bottom:1px solid #161b22; word-break:break-all; }
+  .dns-line b { color:#79c0ff; font-weight:600; }
+  details.hist { margin-top:14px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  details.hist summary { font-size:13px; color:var(--dim); cursor:pointer; }
+  .hist-item { display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px solid #161b22; font-size:12px; }
+  .hist-item:last-child { border-bottom:0; }
+  .hist-item a { color:#7ee787; text-decoration:none; word-break:break-all; }
   .tip { font-size:12px; color:var(--dim); margin-top:14px; line-height:1.7; }
-  .tip b { color:var(--warn); font-weight:600; }
+  .tip b { color:var(--warn); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>M87 资源抓取</h1>
-  <div class="sub">填网址，把这页能拿到的资源全部列出来</div>
+  <h1>M87 网页分析</h1>
+  <div class="sub">资源提取 · 页面信息 · 源码 · DNS</div>
 
   <div class="panel">
-    <label>目标网址</label>
-    <input id="url" type="text" placeholder="example.com 或 https://example.com/page" autocomplete="off" spellcheck="false">
-    <div class="row">
-      <label><input id="deep" type="checkbox"> 顺带抓同域链接（最多 5 页，慢）</label>
-      <label><input id="withLinks" type="checkbox" checked> 包含页面链接</label>
+    <textarea id="urls" placeholder="输入网址，一行一个&#10;example.com&#10;https://example.org/page"></textarea>
+    <div class="opts">
+      <label><input type="checkbox" id="deep"> 递归抓同域链接</label>
+      <label>最多 <input type="number" id="maxpages" value="5" min="1" max="15"> 页</label>
+      <label><input type="checkbox" id="withLinks" checked> 含页面链接</label>
     </div>
-    <button id="go" class="btn-main">开始抓取</button>
+    <button id="go" class="btn-main">开始分析</button>
     <div id="status" class="status"></div>
   </div>
 
-  <div id="result"></div>
-
-  <div class="bar" id="bar" style="display:none">
-    <button id="copyAll" class="btn-sec">复制选中链接</button>
-    <button id="saveAll" class="btn-sec">下载清单</button>
+  <div class="tabs">
+    <button data-tab="res" class="on">资源</button>
+    <button data-tab="meta">页面信息</button>
+    <button data-tab="src">源码</button>
+    <button data-tab="dns">DNS</button>
   </div>
 
+  <section id="tab-res">
+    <div class="tools">
+      <input id="q" type="text" placeholder="筛选，例如 .png 或 api">
+      <select id="catSel"><option value="">全部类型</option></select>
+      <span class="count" id="cnt">0 项</span>
+    </div>
+    <div id="list"><div class="empty">还没有结果</div></div>
+    <div class="bar">
+      <button id="copyBtn" class="btn-sec">复制选中</button>
+      <button id="jsonBtn" class="btn-sec">导出 JSON</button>
+      <button id="txtBtn" class="btn-sec">导出 TXT</button>
+    </div>
+  </section>
+
+  <section id="tab-meta" hidden>
+    <div id="metaList"><div class="empty">还没有结果</div></div>
+  </section>
+
+  <section id="tab-src" hidden>
+    <pre id="srcBox">还没有结果</pre>
+  </section>
+
+  <section id="tab-dns" hidden>
+    <div class="dnsform">
+      <input id="dnsName" type="text" placeholder="域名，例如 example.com">
+      <select id="dnsType">
+        <option value="1">A</option>
+        <option value="28">AAAA</option>
+        <option value="5">CNAME</option>
+        <option value="15">MX</option>
+        <option value="16">TXT</option>
+        <option value="2">NS</option>
+        <option value="6">SOA</option>
+        <option value="257">CAA</option>
+      </select>
+      <button id="dnsGo" class="btn-sec">查询</button>
+    </div>
+    <div id="dnsOut" class="dns-out"></div>
+  </section>
+
+  <details class="hist">
+    <summary id="histSum">历史记录</summary>
+    <div id="histList"></div>
+  </details>
+
   <div class="tip">
-    <b>说明：</b>本页是纯静态页面，优先借用第三方公开抓取接口取网页，失败时自动切换备用代理，不需要服务器、不需要安装。<br>
-    动态加载（滚动后才出现的图片）和需要登录的内容抓不到，少数站点会拒绝代理访问。多试一次或换个网址即可。
+    <b>说明：</b>纯静态页面，优先借用公开抓取接口，失败自动切换备用代理。<br>
+    动态加载的资源、需要登录的内容抓不到；少数站点会拒绝代理访问。
   </div>
 </div>
 
@@ -90,19 +163,31 @@ var PROXIES = [
 ];
 
 var CATS = ['图片', '脚本', '样式', '字体', '媒体', '框架', '链接', '接口'];
-var found = {};
-var pageTitle = '';
+var TYPE_NAMES = {1:'A',2:'NS',5:'CNAME',6:'SOA',15:'MX',16:'TXT',28:'AAAA',257:'CAA'};
+var DOH = [
+  'https://dns.alidns.com/resolve',
+  'https://doh.pub/dns-query',
+  'https://cloudflare-dns.com/dns-query'
+];
 
-function clearFound() {
+var found = {};
+var metaAll = [];
+var srcAll = '';
+var lastUrl = '';
+var currentTab = 'res';
+
+function resetFound() {
   found = {};
   CATS.forEach(function (c) { found[c] = []; });
+  metaAll = [];
+  srcAll = '';
 }
 
 function abs(u, base) {
   if (!u) return null;
   u = String(u).trim().replace(/^["']|["']$/g, '');
   if (!u || /^(data|blob|javascript|mailto|tel|about):/i.test(u)) return null;
-  if (u.indexOf('#') === 0) return null;
+  if (u.charAt(0) === '#') return null;
   try {
     var x = new URL(u, base);
     if (x.protocol !== 'http:' && x.protocol !== 'https:') return null;
@@ -117,7 +202,7 @@ function add(cat, u) {
 }
 
 async function fetchText(url) {
-  var lastErr = null;
+  var lastErr = '';
   for (var i = 0; i < PROXIES.length; i++) {
     try {
       var ctrl = new AbortController();
@@ -132,23 +217,44 @@ async function fetchText(url) {
       lastErr = e.message || '超时';
     }
   }
-  throw new Error('代理全部失败（' + (lastErr || '未知') + '）');
+  throw new Error('代理全部失败（' + lastErr + '）');
+}
+
+function metaOf(doc, base) {
+  function m(sel, attr) {
+    var el = doc.querySelector(sel);
+    if (!el) return '';
+    return el.getAttribute(attr || 'content') || '';
+  }
+  var fav = doc.querySelector('link[rel*="icon"][href]');
+  return {
+    '标题': (doc.title || '').trim(),
+    '描述': m('meta[name="description"]'),
+    '关键词': m('meta[name="keywords"]'),
+    '作者': m('meta[name="author"]'),
+    'og 标题': m('meta[property="og:title"]'),
+    'og 描述': m('meta[property="og:description"]'),
+    'og 图片': abs(m('meta[property="og:image"]'), base) || '',
+    'canonical': abs(m('link[rel="canonical"]', 'href'), base) || '',
+    '图标': fav ? (abs(fav.getAttribute('href'), base) || '') : '',
+    '生成器': m('meta[name="generator"]'),
+    '语言': (doc.documentElement.getAttribute('lang') || ''),
+    '页面地址': base
+  };
 }
 
 function extract(html, base) {
   var doc = new DOMParser().parseFromString(html, 'text/html');
-  pageTitle = (doc.title || '').trim();
-
   var b = doc.querySelector('base[href]');
   if (b) { var bb = abs(b.getAttribute('href'), base); if (bb) base = bb; }
 
   doc.querySelectorAll('img').forEach(function (el) {
     add('图片', abs(el.getAttribute('src'), base));
-    var ss = el.getAttribute('srcset') || el.getAttribute('data-srcset');
-    if (ss) ss.split(',').forEach(function (p) { add('图片', abs(p.trim().split(/\s+/)[0], base)); });
     add('图片', abs(el.getAttribute('data-src'), base));
     add('图片', abs(el.getAttribute('data-original'), base));
     add('图片', abs(el.getAttribute('data-lazy-src'), base));
+    var ss = el.getAttribute('srcset') || el.getAttribute('data-srcset');
+    if (ss) ss.split(',').forEach(function (p) { add('图片', abs(p.trim().split(/\s+/)[0], base)); });
   });
 
   doc.querySelectorAll('link[href]').forEach(function (el) {
@@ -166,9 +272,7 @@ function extract(html, base) {
     }
   });
 
-  doc.querySelectorAll('script[src]').forEach(function (el) {
-    add('脚本', abs(el.getAttribute('src'), base));
-  });
+  doc.querySelectorAll('script[src]').forEach(function (el) { add('脚本', abs(el.getAttribute('src'), base)); });
 
   doc.querySelectorAll('video,audio,source').forEach(function (el) {
     add('媒体', abs(el.getAttribute('src'), base));
@@ -176,25 +280,15 @@ function extract(html, base) {
     if (ss) ss.split(',').forEach(function (p) { add('媒体', abs(p.trim().split(/\s+/)[0], base)); });
   });
 
-  doc.querySelectorAll('video[poster]').forEach(function (el) {
-    add('图片', abs(el.getAttribute('poster'), base));
-  });
-
-  doc.querySelectorAll('iframe[src]').forEach(function (el) {
-    add('框架', abs(el.getAttribute('src'), base));
-  });
-
-  doc.querySelectorAll('a[href]').forEach(function (el) {
-    add('链接', abs(el.getAttribute('href'), base));
-  });
+  doc.querySelectorAll('video[poster]').forEach(function (el) { add('图片', abs(el.getAttribute('poster'), base)); });
+  doc.querySelectorAll('iframe[src]').forEach(function (el) { add('框架', abs(el.getAttribute('src'), base)); });
+  doc.querySelectorAll('a[href]').forEach(function (el) { add('链接', abs(el.getAttribute('href'), base)); });
 
   var cssText = '';
   doc.querySelectorAll('style').forEach(function (el) { cssText += el.textContent; });
   doc.querySelectorAll('[style]').forEach(function (el) { cssText += el.getAttribute('style'); });
-  var m = cssText.match(/url\(\s*['"]?([^'")]+)['"]?\s*\)/gi) || [];
-  m.forEach(function (s) {
-    var u = s.replace(/^url\(\s*['"]?/i, '').replace(/['"]?\s*\)$/, '');
-    add('图片', abs(u, base));
+  (cssText.match(/url\(\s*['"]?([^'")]+)['"]?\s*\)/gi) || []).forEach(function (s) {
+    add('图片', abs(s.replace(/^url\(\s*['"]?/i, '').replace(/['"]?\s*\)$/, ''), base));
   });
 
   var body = doc.body ? doc.body.innerHTML : '';
@@ -207,64 +301,98 @@ function extract(html, base) {
     var h = abs(el.getAttribute('href'), base);
     if (h && h.indexOf('http') === 0) links.push(h);
   });
-  return links;
+
+  var meta = metaOf(doc, base);
+  metaAll.push(meta);
+
+  return { links: links, doc: doc };
 }
 
 function sameOriginLink(link, base) {
   try {
     var a = new URL(link), b = new URL(base);
     if (a.host !== b.host) return false;
-    if (/\.(png|jpe?g|gif|svg|webp|ico|pdf|zip|rar|mp4|mp3|css|js|woff2?|ttf)$/i.test(a.pathname)) return false;
+    if (/\.(png|jpe?g|gif|svg|webp|ico|pdf|zip|rar|7z|mp4|mp3|css|js|woff2?|ttf|otf)$/i.test(a.pathname)) return false;
     return true;
   } catch (e) { return false; }
 }
 
-function render() {
-  var box = document.getElementById('result');
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function fillCatSelect() {
+  var sel = document.getElementById('catSel');
+  sel.innerHTML = '<option value="">全部类型</option>';
+  CATS.forEach(function (c) {
+    if (!found[c] || !found[c].length) return;
+    var o = document.createElement('option');
+    o.value = c; o.textContent = c + '（' + found[c].length + '）';
+    sel.appendChild(o);
+  });
+}
+
+function renderList() {
+  var box = document.getElementById('list');
+  var q = (document.getElementById('q').value || '').toLowerCase().trim();
+  var cat = document.getElementById('catSel').value;
   var total = 0;
   CATS.forEach(function (c) { total += found[c].length; });
 
   if (!total) {
     box.innerHTML = '<div class="empty">没有找到资源</div>';
-    document.getElementById('bar').style.display = 'none';
+    document.getElementById('cnt').textContent = '0 项';
     return;
   }
 
-  var html = '<div class="panel" style="padding:12px 14px;color:var(--dim);font-size:12.5px">' +
-             (pageTitle ? ('页面标题：' + escapeHtml(pageTitle) + '<br>') : '') +
-             '共找到 <b style="color:var(--text)">' + total + '</b> 项资源</div>';
-
+  var shown = 0;
+  var html = '';
   CATS.forEach(function (c) {
-    if (!found[c].length) return;
+    if (cat && cat !== c) return;
+    var arr = found[c].filter(function (u) { return !q || u.toLowerCase().indexOf(q) >= 0; });
+    if (!arr.length) return;
+    shown += arr.length;
     var id = 'g_' + c;
-    html += '<div class="group"><div class="group-head" data-toggle="' + id + '">' +
-            '<b>' + c + '</b><span>' + found[c].length + ' 项</span></div>' +
-            '<div class="group-body" id="' + id + '">';
-    found[c].forEach(function (u, i) {
-      html += '<div class="item"><input type="checkbox" checked data-cat="' + c +
-              '" data-url="' + escapeAttr(u) + '"><a href="' + escapeAttr(u) +
-              '" target="_blank" rel="noopener noreferrer">' + escapeHtml(u) + '</a></div>';
+    html += '<div class="group"><div class="group-head" data-t="' + id + '"><b>' + c +
+            '</b><span>' + arr.length + ' 项</span></div><div class="group-body" id="' + id + '">';
+    arr.forEach(function (u) {
+      var isImg = c === '图片' && /\.(png|jpe?g|gif|webp|svg|ico|avif)(\?|$)/i.test(u);
+      html += '<div class="item">' +
+              '<input type="checkbox" checked data-cat="' + c + '" data-url="' + esc(u) + '">' +
+              (isImg ? '<img class="thumb" loading="lazy" src="' + esc(u) + '" alt="">' : '') +
+              '<a href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">' + esc(u) + '</a></div>';
     });
     html += '</div></div>';
   });
 
-  box.innerHTML = html;
-  document.getElementById('bar').style.display = 'flex';
+  box.innerHTML = html || '<div class="empty">没有匹配的资源</div>';
+  document.getElementById('cnt').textContent = shown + ' / ' + total + ' 项';
 
   box.querySelectorAll('.group-head').forEach(function (h) {
     h.onclick = function () {
-      var b = document.getElementById(h.dataset.toggle);
+      var b = document.getElementById(h.dataset.t);
       b.style.display = b.style.display === 'none' ? 'block' : 'none';
     };
   });
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, function (c) {
-    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+function renderMeta() {
+  var box = document.getElementById('metaList');
+  if (!metaAll.length) { box.innerHTML = '<div class="empty">还没有结果</div>'; return; }
+  var html = '';
+  metaAll.forEach(function (m, i) {
+    html += '<div class="panel" style="padding:0;overflow:hidden;margin-bottom:10px">';
+    html += '<div style="padding:9px 12px;background:var(--panel);font-size:12.5px;color:var(--dim)">第 ' + (i + 1) + ' 页</div>';
+    Object.keys(m).forEach(function (k) {
+      if (!m[k]) return;
+      html += '<div class="meta-row"><div class="meta-k">' + esc(k) + '</div><div class="meta-v">' + esc(m[k]) + '</div></div>';
+    });
+    html += '</div>';
   });
+  box.innerHTML = html;
 }
-function escapeAttr(s) { return escapeHtml(s); }
 
 function setStatus(msg, cls) {
   var el = document.getElementById('status');
@@ -272,64 +400,77 @@ function setStatus(msg, cls) {
   el.className = 'status' + (cls ? ' ' + cls : '');
 }
 
+function switchTab(name) {
+  currentTab = name;
+  document.querySelectorAll('.tabs button').forEach(function (b) {
+    b.classList.toggle('on', b.dataset.tab === name);
+  });
+  ['res', 'meta', 'src', 'dns'].forEach(function (n) {
+    document.getElementById('tab-' + n).hidden = (n !== name);
+  });
+}
+
 async function run() {
-  var raw = document.getElementById('url').value.trim();
+  var raw = document.getElementById('urls').value.trim();
   if (!raw) { setStatus('先填网址', 'err'); return; }
-  if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
+  var list = raw.split(/[\n,，\s]+/).filter(Boolean);
+  var urls = list.map(function (u) { return /^https?:\/\//i.test(u) ? u : 'https://' + u; });
 
   var deep = document.getElementById('deep').checked;
+  var maxPages = Math.max(1, Math.min(15, parseInt(document.getElementById('maxpages').value, 10) || 5));
   var withLinks = document.getElementById('withLinks').checked;
 
-  clearFound();
-  document.getElementById('result').innerHTML = '';
-  document.getElementById('bar').style.display = 'none';
+  resetFound();
+  document.getElementById('list').innerHTML = '<div class="empty">抓取中</div>';
+  document.getElementById('metaList').innerHTML = '<div class="empty">抓取中</div>';
+  document.getElementById('srcBox').textContent = '抓取中';
   document.getElementById('go').disabled = true;
-  setStatus('正在抓取 ' + raw + ' …');
+  switchTab('res');
+  setStatus('开始分析 ' + urls.length + ' 个网址');
+
+  var queue = urls.map(function (u) { return { url: u, d: 0 }; });
+  var seen = {};
+  var ok = 0, fail = 0, lastErr = '';
 
   try {
-    var queue = [{ url: raw, d: 0 }];
-    var seen = {};
-    var ok = 0;
-    var lastErr = '';
-
-    while (queue.length && ok < 6) {
+    while (queue.length && ok < maxPages) {
       var job = queue.shift();
       if (seen[job.url]) continue;
       seen[job.url] = 1;
-
-      setStatus('正在抓取 ' + job.url + ' …（已成功 ' + ok + ' 页）');
+      setStatus('抓取 ' + job.url + '（成功 ' + ok + ' 页）');
       var html;
       try {
         html = await fetchText(job.url);
       } catch (e) {
-        lastErr = e.message;
-        continue;
+        fail++; lastErr = e.message; continue;
       }
       ok++;
-
-      var links = extract(html, job.url);
-
+      lastUrl = job.url;
+      if (!srcAll) srcAll = html;
+      var r = extract(html, job.url);
       if (deep && job.d < 1) {
         var picks = 0;
-        for (var i = 0; i < links.length && picks < 5; i++) {
-          if (sameOriginLink(links[i], raw) && !seen[links[i]]) {
-            queue.push({ url: links[i], d: job.d + 1 });
+        for (var i = 0; i < r.links.length && picks < 4 && ok + queue.length < maxPages; i++) {
+          if (sameOriginLink(r.links[i], urls[0]) && !seen[r.links[i]]) {
+            queue.push({ url: r.links[i], d: job.d + 1 });
             picks++;
           }
         }
       }
     }
 
-    if (!ok) throw new Error(lastErr || '抓取失败');
+    if (!ok) throw new Error(lastErr || '全部失败');
 
     if (!withLinks) found['链接'] = [];
-    render();
-
-    var total = 0;
-    CATS.forEach(function (c) { total += found[c].length; });
-    setStatus('完成，共 ' + total + ' 项资源（抓了 ' + ok + ' 页）', 'ok');
+    fillCatSelect();
+    renderList();
+    renderMeta();
+    document.getElementById('srcBox').textContent = srcAll;
+    setStatus('完成，成功 ' + ok + ' 页' + (fail ? '，失败 ' + fail + ' 页' : ''), 'ok');
+    saveHistory(urls[0], ok);
   } catch (e) {
     setStatus('失败：' + e.message, 'err');
+    document.getElementById('list').innerHTML = '<div class="empty">抓取失败</div>';
   } finally {
     document.getElementById('go').disabled = false;
   }
@@ -337,21 +478,16 @@ async function run() {
 
 function selected() {
   var out = [];
-  document.querySelectorAll('#result input[type=checkbox]').forEach(function (cb) {
+  document.querySelectorAll('#list input[type=checkbox]').forEach(function (cb) {
     if (cb.checked) out.push({ cat: cb.dataset.cat, url: cb.dataset.url });
   });
   return out;
 }
 
-document.getElementById('go').onclick = run;
-
-document.getElementById('copyAll').onclick = async function () {
-  var list = selected();
-  if (!list.length) { setStatus('没有选中项', 'err'); return; }
-  var text = list.map(function (x) { return x.url; }).join('\n');
+async function copyText(text, okMsg) {
   try {
     await navigator.clipboard.writeText(text);
-    setStatus('已复制 ' + list.length + ' 条链接', 'ok');
+    setStatus(okMsg, 'ok');
   } catch (e) {
     var t = document.createElement('textarea');
     t.value = text;
@@ -359,29 +495,140 @@ document.getElementById('copyAll').onclick = async function () {
     t.select();
     document.execCommand('copy');
     t.remove();
-    setStatus('已复制 ' + list.length + ' 条链接', 'ok');
+    setStatus(okMsg, 'ok');
   }
+}
+
+function download(name, text, type) {
+  var blob = new Blob([text], { type: type || 'text/plain;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 3000);
+}
+
+async function doh(name, type) {
+  var lastErr = '';
+  for (var i = 0; i < DOH.length; i++) {
+    try {
+      var r = await fetch(DOH[i] + '?name=' + encodeURIComponent(name) + '&type=' + type, {
+        headers: { accept: 'application/dns-json' }
+      });
+      if (!r.ok) { lastErr = 'HTTP ' + r.status; continue; }
+      var j = await r.json();
+      if (j && typeof j.Status !== 'undefined') return j;
+    } catch (e) { lastErr = e.message; }
+  }
+  throw new Error('DNS 查询失败（' + lastErr + '）');
+}
+
+function saveHistory(url, pages) {
+  try {
+    var h = JSON.parse(localStorage.getItem('m87_hist') || '[]');
+    h = h.filter(function (x) { return x.url !== url; });
+    h.unshift({ url: url, t: Date.now(), p: pages });
+    localStorage.setItem('m87_hist', JSON.stringify(h.slice(0, 20)));
+    renderHistory();
+  } catch (e) {}
+}
+
+function renderHistory() {
+  var box = document.getElementById('histList');
+  var h = [];
+  try { h = JSON.parse(localStorage.getItem('m87_hist') || '[]'); } catch (e) {}
+  document.getElementById('histSum').textContent = '历史记录（' + h.length + '）';
+  if (!h.length) { box.innerHTML = '<div class="empty" style="padding:14px 0">暂无</div>'; return; }
+  box.innerHTML = h.map(function (x) {
+    return '<div class="hist-item"><a href="#" data-u="' + esc(x.url) + '">' + esc(x.url) + '</a>' +
+           '<span style="color:var(--dim)">' + x.p + ' 页</span></div>';
+  }).join('');
+  box.querySelectorAll('a[data-u]').forEach(function (a) {
+    a.onclick = function (e) {
+      e.preventDefault();
+      document.getElementById('urls').value = a.dataset.u;
+      document.getElementById('urls').focus();
+    };
+  });
+}
+
+document.getElementById('go').onclick = run;
+document.querySelectorAll('.tabs button').forEach(function (b) {
+  b.onclick = function () { switchTab(b.dataset.tab); };
+});
+document.getElementById('q').oninput = renderList;
+document.getElementById('catSel').onchange = renderList;
+
+document.getElementById('copyBtn').onclick = function () {
+  var s = selected();
+  if (!s.length) { setStatus('没有选中项', 'err'); return; }
+  copyText(s.map(function (x) { return x.url; }).join('\n'), '已复制 ' + s.length + ' 条链接');
 };
 
-document.getElementById('saveAll').onclick = function () {
-  var list = selected();
-  if (!list.length) { setStatus('没有选中项', 'err'); return; }
+document.getElementById('txtBtn').onclick = function () {
+  var s = selected();
+  if (!s.length) { setStatus('没有选中项', 'err'); return; }
   var lines = [];
   CATS.forEach(function (c) {
-    var part = list.filter(function (x) { return x.cat === c; });
+    var part = s.filter(function (x) { return x.cat === c; });
     if (!part.length) return;
     lines.push('=== ' + c + '（' + part.length + '）===');
     part.forEach(function (x) { lines.push(x.url); });
     lines.push('');
   });
-  var blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'm87-resources.txt';
-  a.click();
-  setTimeout(function () { URL.revokeObjectURL(a.href); }, 3000);
+  download('m87-resources.txt', lines.join('\n'));
   setStatus('清单已下载', 'ok');
 };
+
+document.getElementById('jsonBtn').onclick = function () {
+  var s = selected();
+  var data = {
+    source: lastUrl,
+    time: new Date().toISOString(),
+    pages: metaAll,
+    resources: {}
+  };
+  CATS.forEach(function (c) {
+    var part = s.filter(function (x) { return x.cat === c; }).map(function (x) { return x.url; });
+    if (part.length) data.resources[c] = part;
+  });
+  download('m87-resources.json', JSON.stringify(data, null, 2), 'application/json;charset=utf-8');
+  setStatus('JSON 已下载', 'ok');
+};
+
+document.getElementById('dnsGo').onclick = async function () {
+  var name = document.getElementById('dnsName').value.trim();
+  var type = document.getElementById('dnsType').value;
+  if (!name) { setStatus('先填域名', 'err'); switchTab('dns'); return; }
+  var out = document.getElementById('dnsOut');
+  out.innerHTML = '<div class="dns-line">查询中</div>';
+  try {
+    var j = await doh(name, type);
+    var html = '';
+    if (j.Status !== 0) {
+      html = '<div class="dns-line">查询返回状态 ' + j.Status + '（3 表示域名不存在）</div>';
+    } else if (j.Answer && j.Answer.length) {
+      j.Answer.forEach(function (a) {
+        html += '<div class="dns-line"><b>' + (TYPE_NAMES[a.type] || a.type) + '</b>  ' +
+                esc(a.data) + '<span style="color:var(--dim)">  TTL ' + a.TTL + '</span></div>';
+      });
+    } else {
+      html = '<div class="dns-line">没有记录</div>';
+    }
+    out.innerHTML = html;
+  } catch (e) {
+    out.innerHTML = '<div class="dns-line" style="color:var(--red)">' + esc(e.message) + '</div>';
+  }
+};
+
+document.getElementById('dnsName').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') document.getElementById('dnsGo').click();
+});
+
+renderHistory();
+resetFound();
 </script>
 </body>
 </html>
