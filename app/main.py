@@ -341,6 +341,11 @@ async def index() -> FileResponse:
     return FileResponse(os.path.join(WEB_DIR, "index.html"))
 
 
+@app.get("/cipher")
+async def cipher_page() -> FileResponse:
+    return FileResponse(os.path.join(WEB_DIR, "cipher.html"))
+
+
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 
