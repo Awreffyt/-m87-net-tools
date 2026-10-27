@@ -197,7 +197,7 @@ function abs(u, base) {
 
 function add(cat, u) {
   if (!u) return;
-  var arr = found[cat];
+  var arr = found[cat] || (found[cat] = []);
   if (arr.indexOf(u) < 0) arr.push(u);
 }
 
@@ -241,6 +241,141 @@ function metaOf(doc, base) {
     '语言': (doc.documentElement.getAttribute('lang') || ''),
     '页面地址': base
   };
+}
+
+/* ======== 深度挖掘：还原被编码 / 拼接 / 转义过的资源地址 ======== */
+
+var PATH_RE_SRC = '(?:/|\\.{1,2}/)[^\\s"\'`<>]+?\\.(?:png|jpe?g|gif|webp|svg|bmp|ico|avif|woff2?|ttf|otf|eot|css|m?js|mp4|webm|ogv|m4v|mov|mp3|wav|m4a|flac|aac|ogg|json|xml|pdf|zip)(?:\\?[^\\s"\'`<>]*)?';
+
+function printableRatio(v) {
+  if (!v) return 0;
+  var p = 0;
+  for (var i = 0; i < v.length; i++) {
+    var c = v.charCodeAt(i);
+    if (c >= 32 && c !== 127) p++;
+  }
+  return p / v.length;
+}
+
+function rot13(s) {
+  return s.replace(/[a-zA-Z]/g, function (c) {
+    var base = c <= 'Z' ? 65 : 97;
+    return String.fromCharCode((c.charCodeAt(0) - base + 13) % 26 + base);
+  });
+}
+
+/* 尝试所有常见编码：unicode 转义 / URL 编码 / Base64 / Hex / ROT13 */
+function tryDecode(s) {
+  var out = [], seen = {};
+  function push(v) {
+    if (v && v !== s && !seen[v] && printableRatio(v) > 0.6) { seen[v] = 1; out.push(v); }
+  }
+  if (!s || s.length < 4) return out;
+
+  if (/\\u[0-9a-fA-F]{4}|\\x[0-9a-fA-F]{2}/.test(s)) {
+    try {
+      push(s.replace(/\\u([0-9a-fA-F]{4})/g, function (_, h) {
+        return String.fromCharCode(parseInt(h, 16));
+      }).replace(/\\x([0-9a-fA-F]{2})/g, function (_, h) {
+        return String.fromCharCode(parseInt(h, 16));
+      }));
+    } catch (e) {}
+  }
+
+  if (s.indexOf('%') >= 0) {
+    try { push(decodeURIComponent(s)); } catch (e) {}
+  }
+
+  var t = s.trim();
+  if (/^[A-Za-z0-9+\/_-]{8,}={0,2}$/.test(t)) {
+    try {
+      var b = t.replace(/-/g, '+').replace(/_/g, '/');
+      var pad = b.length % 4;
+      if (pad === 2) b += '==';
+      else if (pad === 3) b += '=';
+      else if (pad === 1) b = '';
+      if (b) push(atob(b));
+    } catch (e) {}
+  }
+
+  if (/^[0-9a-fA-F]+$/.test(t) && t.length % 2 === 0) {
+    try {
+      var hex = '';
+      for (var i = 0; i < t.length; i += 2) hex += String.fromCharCode(parseInt(t.substr(i, 2), 16));
+      push(hex);
+    } catch (e) {}
+  }
+
+  if (/[a-zA-Z]/.test(s)) {
+    var r13 = rot13(s);
+    /* ROT13 误报率高，只在结果本身是完整资源路径时才收 */
+    if (new RegExp('^(?:' + PATH_RE_SRC + ')$', 'i').test(r13)) push(r13);
+  }
+  return out;
+}
+
+/* 把 "a" + "b" + "c" 折叠成一个完整字符串，还原被拆散的资源地址 */
+function mergeConcat(text) {
+  var re = /(["'`])((?:\\.|[^"'`\\])*)\1(?:\s*\+\s*(["'`])((?:\\.|[^"'`\\])*)\3)+/g;
+  return text.replace(re, function (m) {
+    var parts = [], sr = /(["'`])((?:\\.|[^"'`\\])*)\1/g, x;
+    while ((x = sr.exec(m)) !== null) parts.push(x[2]);
+    return '"' + parts.join('') + '"';
+  });
+}
+
+/* 按扩展名归类 */
+function catOf(u) {
+  var p = u.split('?')[0].split('#')[0].toLowerCase();
+  if (/\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/.test(p)) return '图片';
+  if (/\.(woff2?|ttf|otf|eot)$/.test(p)) return '字体';
+  if (/\.css$/.test(p)) return '样式';
+  if (/\.m?js$/.test(p)) return '脚本';
+  if (/\.(mp4|webm|ogv|m4v|mov|mp3|wav|m4a|flac|aac|ogg)$/.test(p)) return '媒体';
+  if (/\.(json|xml|pdf|zip|gz|rar)$/.test(p)) return '接口';
+  if (/\/api\b|api\.|\/v\d+\/|\.php$/.test(p)) return '接口';
+  return '链接';
+}
+
+/* 从一个 JS 片段 / HTML 文本里挖出所有可能的资源地址，返回新增条数 */
+function deepMineJs(text, base) {
+  if (!text) return 0;
+  var n = 0;
+  function feed(u) {
+    if (!u || u.length > 2048) return;
+    var a = abs(u, base);
+    if (!a) return;
+    add(catOf(a), a);
+    n++;
+  }
+  var merged = mergeConcat(text);
+  var m, re;
+
+  re = /https?:\/\/[^\s"'`<>()\\]+/gi;
+  while ((m = re.exec(merged)) !== null) feed(m[0]);
+
+  re = new RegExp(PATH_RE_SRC, 'gi');
+  while ((m = re.exec(merged)) !== null) feed(m[0]);
+
+  re = /"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|`((?:\\.|[^`\\])*)`/g;
+  while ((m = re.exec(merged)) !== null) {
+    var s = m[1] !== undefined ? m[1] : (m[2] !== undefined ? m[2] : m[3]);
+    if (!s || s.length < 4) continue;
+    if (/^(https?:\/\/|\.{0,2}\/)/i.test(s)) feed(s);
+    var ds = tryDecode(s);
+    for (var i = 0; i < ds.length; i++) {
+      if (/^(https?:\/\/|\.{0,2}\/)/i.test(ds[i])) feed(ds[i]);
+      var x, r2 = /https?:\/\/[^\s"'`<>()\\]+/gi;
+      while ((x = r2.exec(ds[i])) !== null) feed(x[0]);
+      var r3 = new RegExp(PATH_RE_SRC, 'gi');
+      while ((x = r3.exec(ds[i])) !== null) feed(x[0]);
+    }
+  }
+
+  re = /(?:fetch|axios\.get|axios\.post|axios|XMLHttpRequest|\.ajax)\s*\(\s*["'`]([^"'`]+)["'`]/gi;
+  while ((m = re.exec(text)) !== null) feed(m[1]);
+
+  return n;
 }
 
 function extract(html, base) {
@@ -302,10 +437,16 @@ function extract(html, base) {
     if (h && h.indexOf('http') === 0) links.push(h);
   });
 
+  /* 深度挖掘：内联脚本 + 整页文本，还原 Base64/Hex/Unicode/URL编码/字符串拼接 的资源地址 */
+  var jsInline = '';
+  doc.querySelectorAll('script:not([src])').forEach(function (el) { jsInline += el.textContent + '\n'; });
+  if (jsInline) deepMineJs(jsInline, base);
+  if (doc.body && doc.body.innerHTML) deepMineJs(doc.body.innerHTML, base);
+
   var meta = metaOf(doc, base);
   metaAll.push(meta);
 
-  return { links: links, doc: doc };
+  return { links: links, doc: doc, _jsHint: jsInline };
 }
 
 function sameOriginLink(link, base) {
@@ -448,6 +589,21 @@ async function run() {
       lastUrl = job.url;
       if (!srcAll) srcAll = html;
       var r = extract(html, job.url);
+      /* 外部 JS 二次挖掘：抓同源脚本，解出里面被编码/拼接的资源地址 */
+      if (deep) {
+        var jsSeen = {}, jsList = (found['脚本'] || []).slice(0, 6), jsTried = 0;
+        for (var ji = 0; ji < jsList.length && jsTried < 3; ji++) {
+          var ju = jsList[ji];
+          if (!ju || jsSeen[ju]) continue;
+          jsSeen[ju] = 1;
+          jsTried++;
+          try {
+            setStatus('深挖脚本 ' + ju);
+            var jtext = await fetchText(ju);
+            deepMineJs(jtext, ju);
+          } catch (e) {}
+        }
+      }
       if (deep && job.d < 1) {
         var picks = 0;
         for (var i = 0; i < r.links.length && picks < 4 && ok + queue.length < maxPages; i++) {
