@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+import base64
+import codecs
 import concurrent.futures
 import gzip
 import io
@@ -597,6 +599,214 @@ def _extract_js_urls(text: str) -> list[tuple[str, str]]:
     return out
 
 
+# ---------------------------------------------------------------- JS 深度挖掘（解码加密/拼接的资源 URL）
+
+# JS 字符串字面量：单引号、双引号、反引号，支持转义
+_JS_STRING_RE = re.compile(
+    r"""(?:"((?:\\.|[^"\\])*)")|(?:'((?:\\.|[^'\\])*)')|(?:`((?:\\.|[^`\\])*)`)""",
+    re.DOTALL,
+)
+
+# API 端点特征：fetch / axios / XHR / $.ajax 调用
+_API_CALL_RE = re.compile(
+    r"""(?:fetch|axios\.get|axios\.post|axios\(|XMLHttpRequest|\.ajax)\s*\(\s*["'`]([^"'`]+)["'`]""",
+    re.I,
+)
+
+# 通用 URL 正则（不限扩展名，用于从解码后的字符串里提取）
+_GENERIC_URL_RE = re.compile(
+    r"https?://[^\s\"'`<>()\\]+",
+    re.I,
+)
+_GENERIC_PATH_RE = re.compile(
+    r"""(?:/|\./|\.\./)[^\s"'`<>]+?\.(?:png|jpe?g|gif|webp|svg|bmp|ico|avif|woff2?|ttf|otf|eot|css|m?js|mp4|webm|ogv|m4v|mov|mp3|wav|m4a|flac|aac|ogg|json|xml|pdf|zip)(\?[^\s"'`<>]*)?""",
+    re.I,
+)
+
+
+# 相邻字符串字面量拼接："a" + "b"  'a'+'b'  模板里也常见
+_CONCAT_STRING_RE = re.compile(
+    r"""(["'`])((?:\\.|[^"'`\\])*)\1\s*\+\s*(["'`])((?:\\.|[^"'`\\])*)\3""",
+    re.DOTALL,
+)
+
+
+def _extract_concatenated_strings(text: str) -> list[str]:
+    """识别 JS 中 'a' + 'b' 形式的字符串拼接，返回拼接后的完整字符串列表。
+
+    用于还原被拆分的资源 URL，例如：
+        "https://" + "cdn.example.com" + "/img/a.png"
+    会被还原为 "https://cdn.example.com/img/a.png"。
+    """
+    out: list[str] = []
+    for m in _CONCAT_STRING_RE.finditer(text or ""):
+        parts = [m.group(2), m.group(4)]
+        # 继续向后贪婪匹配更多 + "xxx" 片段
+        pos = m.end()
+        remainder = text[pos:]
+        tail_re = re.compile(r"""\s*\+\s*(["'`])((?:\\.|[^"'`\\])*)\1""", re.DOTALL)
+        for tm in tail_re.finditer(remainder):
+            parts.append(tm.group(2))
+            if tm.end() < len(remainder) and not remainder[tm.end():].lstrip().startswith("+"):
+                break
+            if tm.end() == len(remainder):
+                break
+        combined = "".join(parts)
+        # 还原转义
+        combined = combined.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
+        combined = combined.replace('\\"', '"').replace("\\'", "'").replace("\\\\", "\\")
+        combined = combined.replace("\\/", "/")
+        out.append(combined)
+    return out
+
+
+def _extract_js_strings(text: str) -> list[str]:
+    """提取 JS 代码中所有字符串字面量（单/双/反引号），含转义还原。"""
+    out: list[str] = []
+    for match in _JS_STRING_RE.finditer(text or ""):
+        for group in match.groups():
+            if group is not None:
+                # 还原常见转义
+                s = group
+                s = s.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
+                s = s.replace('\\"', '"').replace("\\'", "'").replace("\\\\", "\\")
+                s = s.replace("\\/", "/")
+                out.append(s)
+    return out
+
+
+def _try_decode(s: str) -> list[str]:
+    """对字符串尝试多种解码，返回所有可能的解码结果（去重）。"""
+    results: list[str] = []
+    if not s or len(s) < 4:
+        return results
+    seen: set[str] = set()
+
+    def add(value: str):
+        if value and value not in seen and value != s:
+            seen.add(value)
+            results.append(value)
+
+    # 1. Unicode 转义 \uXXXX / \xXX
+    if "\\u" in s or "\\x" in s:
+        try:
+            add(s.encode("utf-8").decode("unicode_escape"))
+        except Exception:
+            pass
+
+    # 2. URL 编码 %XX
+    if "%" in s:
+        try:
+            add(urllib.parse.unquote(s))
+        except Exception:
+            pass
+
+    # 3. Base64（标准 + URL-safe，含缺 padding）
+    candidate = s.strip()
+    if re.match(r"^[A-Za-z0-9+/\-_]+={0,2}$", candidate) and len(candidate) >= 8:
+        for variant in (candidate, candidate.replace("-", "+").replace("_", "/")):
+            try:
+                padded = variant + "=" * ((4 - len(variant) % 4) % 4)
+                raw = base64.b64decode(padded, validate=False)
+                decoded = raw.decode("utf-8", "replace")
+                # 只保留大部分可打印的结果
+                printable = sum(1 for c in decoded if c.isprintable() or c in "\n\r\t")
+                if decoded and printable / max(len(decoded), 1) > 0.6:
+                    add(decoded)
+            except Exception:
+                pass
+
+    # 4. Hex 解码
+    if re.match(r"^[0-9a-fA-F]+$", candidate) and len(candidate) % 2 == 0:
+        try:
+            raw = bytes.fromhex(candidate)
+            decoded = raw.decode("utf-8", "replace")
+            printable = sum(1 for c in decoded if c.isprintable() or c in "\n\r\t")
+            if decoded and printable / max(len(decoded), 1) > 0.6:
+                add(decoded)
+        except Exception:
+            pass
+
+    # 5. ROT13（对付简单移位）
+    if re.search(r"[a-zA-Z]", s):
+        try:
+            add(codecs.decode(s, "rot_13"))
+        except Exception:
+            pass
+
+    return results
+
+
+def _deep_mine_js(text: str, base: str = "") -> list[tuple[str, str]]:
+    """深度挖掘 JS：提取所有字符串 → 尝试解码 → 从原文和解码结果中提取 URL/资源。
+
+    对付的场景：
+    * Base64 / Hex / Unicode 转义编码的资源地址
+    * JS 里拼接、拆分的路径
+    * API 接口端点（fetch/axios/XHR）
+    """
+    results: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    def add_url(raw: str, source: str):
+        if not raw or len(raw) > 2048 or raw in seen:
+            return
+        seen.add(raw)
+        lower = raw.lower().split("?")[0]
+        if re.search(r"\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$", lower):
+            results.append((raw, source + ".image"))
+        elif re.search(r"\.(woff2?|ttf|otf|eot)$", lower):
+            results.append((raw, source + ".font"))
+        elif re.search(r"\.css$", lower):
+            results.append((raw, source + ".style"))
+        elif re.search(r"\.m?js$", lower):
+            results.append((raw, source + ".script"))
+        elif re.search(r"\.(mp4|webm|ogv|m4v|mov)$", lower):
+            results.append((raw, source + ".video"))
+        elif re.search(r"\.(mp3|wav|m4a|flac|aac|ogg)$", lower):
+            results.append((raw, source + ".audio"))
+        elif re.search(r"\.(json|xml|pdf|zip|gz|rar)$", lower):
+            results.append((raw, source + ".data"))
+        else:
+            results.append((raw, source + ".url"))
+
+    # 1. 原有明文 URL 提取
+    for raw, source in _extract_js_urls(text):
+        add_url(raw, source)
+
+    # 1.5 JS 字符串拼接还原："https://" + "host" + "/path/x.png"
+    for combined in _extract_concatenated_strings(text):
+        if re.match(r"https?://", combined) or re.match(r"^/[^/]", combined) or re.match(r"^\.?\.?/", combined):
+            add_url(combined, "js.concat")
+        for decoded in _try_decode(combined):
+            for m in _GENERIC_URL_RE.finditer(decoded):
+                add_url(m.group(0), "js.concat.decoded")
+            for m in _GENERIC_PATH_RE.finditer(decoded):
+                add_url(m.group(0), "js.concat.decoded")
+
+    # 2. API 端点提取
+    for match in _API_CALL_RE.finditer(text or ""):
+        add_url(match.group(1), "js.api")
+
+    # 3. 所有字符串字面量 → 解码 → 提取 URL
+    strings = _extract_js_strings(text)
+    for s in strings:
+        # 原字符串本身可能就是 URL / 路径
+        if re.match(r"https?://", s) or re.match(r"^/[^/]", s) or re.match(r"^\.?\.?/", s):
+            add_url(s, "js.string")
+        # 尝试解码
+        for decoded in _try_decode(s):
+            for m in _GENERIC_URL_RE.finditer(decoded):
+                add_url(m.group(0), "js.decoded")
+            for m in _GENERIC_PATH_RE.finditer(decoded):
+                add_url(m.group(0), "js.decoded")
+            # 解码结果如果本身是路径
+            if re.match(r"^/[^/]", decoded) or re.match(r"^\.?\.?/", decoded):
+                add_url(decoded, "js.decoded")
+
+    return results
+
+
 def _extract_raw_urls(text: str) -> list[str]:
     """兜底：不看标签结构，直接扫全文里裸露的资源 URL。"""
     found: list[str] = []
@@ -805,10 +1015,10 @@ class _Extract(HTMLParser):
             self._js_buf.append(data)
 
     def js_resources(self) -> list[tuple[str, str]]:
-        """解析所有内联脚本，提取资源引用。"""
+        """解析所有内联脚本，提取资源引用（含编码/拼接 URL 深度挖掘）。"""
         out: list[tuple[str, str]] = []
         for chunk in self.inline_js:
-            out.extend(_extract_js_urls(chunk))
+            out.extend(_deep_mine_js(chunk))
         return out
 
 
@@ -921,7 +1131,10 @@ def extract(raw_url: str, include_html: bool = True) -> dict:
         base = base or normalized
 
     # 内联脚本里藏着大量资源（SPA 站点几乎全在这里）
-    inline = parser.js_resources()
+    # 深度挖掘：提取所有字符串 → 解码 base64/hex/unicode → 提取 URL/API
+    inline = []
+    for chunk in parser.inline_js:
+        inline.extend(_deep_mine_js(chunk))
     _bucket_by_js(inline, {
         "images": parser.images, "fonts": parser.fonts, "styles": parser.styles,
         "scripts": parser.scripts, "videos": parser.videos, "audios": parser.audios,
@@ -1020,21 +1233,96 @@ def _extract_css_urls(text: str) -> list[tuple[str, str]]:
     return out
 
 
+def _fetch_cloudscraper(url: str, referer: str = "", max_bytes: int = MAX_HTML_BYTES) -> dict | None:
+    """用 cloudscraper 突破 Cloudflare / SiteGuard 等 JS 挑战页。
+
+    返回结构与 http_get 一致；若 cloudscraper 未安装或请求失败返回 None。
+    """
+    try:
+        import cloudscraper  # type: ignore
+    except Exception:  # noqa: BLE001
+        return None
+    started = time.time()
+    headers = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept-Encoding": "gzip, deflate",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    }
+    if referer:
+        headers["Referer"] = referer
+    try:
+        scraper = cloudscraper.create_scraper(
+            browser={"browser": "chrome", "platform": "windows", "desktop": True},
+        )
+        resp = scraper.get(url, headers=headers, timeout=TIMEOUT, allow_redirects=True)
+        body = resp.content
+        if len(body) > max_bytes:
+            body = body[:max_bytes]
+        content_type = resp.headers.get("Content-Type", "")
+        text = _decode_body(body, content_type)
+        is_html = "html" in content_type.lower() or text.lstrip()[:15].lower().startswith(("<!doctype html", "<html"))
+        return {
+            "url": url,
+            "open": 200 <= resp.status_code < 400,
+            "status": resp.status_code,
+            "latency": round((time.time() - started) * 1000),
+            "finalUrl": resp.url,
+            "redirected": resp.url != url,
+            "redirectChain": [],
+            "contentType": content_type,
+            "isHtml": is_html,
+            "size": len(body),
+            "server": resp.headers.get("Server", ""),
+            "headers": {k.lower(): v for k, v in resp.headers.items()},
+            "text": text,
+            "error": None,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return None
+
+
 def _fetch_with_retry(url: str, referer: str = "", max_bytes: int = MAX_HTML_BYTES) -> dict | None:
-    """带 Referer 与 UA 轮换的重试抓取，用于应对简单反爬。"""
+    """带 Referer 与 UA 轮换的重试抓取，用于应对简单反爬；命中 Cloudflare 时降级 cloudscraper。"""
     extra = {"Referer": referer} if referer else {}
+    last_result: dict | None = None
     for attempt in range(3):
         extra["User-Agent"] = random.choice(UA_POOL)
         result = http_get(url, max_bytes=max_bytes, extra_headers=extra)
+        last_result = result
         if result.get("open") and not result.get("error"):
-            return result
+            # 即使 200，也可能是 Cloudflare 拦截页（cf-mitigated 等）
+            challenge = _detect_challenge(
+                result.get("text", ""), result.get("headers") or {}, result.get("status") or 0
+            )
+            if not challenge:
+                return result
         # 202 / 403 / 429 / 503 多半是触发反爬，换 UA 稍等再试
         if result.get("status") in (202, 403, 429, 503) and attempt < 2:
             time.sleep(0.6 + random.random() * 0.8)
             extra["Referer"] = referer or url
             continue
-        return result
-    return None
+        break
+    # 三轮普通请求都没拿到正常页面 → 尝试 cloudscraper 突破 JS 挑战
+    if last_result is not None:
+        challenge = _detect_challenge(
+            last_result.get("text", ""), last_result.get("headers") or {}, last_result.get("status") or 0
+        )
+        if challenge or not last_result.get("open"):
+            cf = _fetch_cloudscraper(url, referer=referer, max_bytes=max_bytes)
+            if cf and cf.get("open"):
+                challenge2 = _detect_challenge(
+                    cf.get("text", ""), cf.get("headers") or {}, cf.get("status") or 0
+                )
+                if not challenge2:
+                    return cf
+    return last_result
 
 
 def _host_variants(host: str) -> set[str]:
@@ -1177,7 +1465,7 @@ def deep_extract(raw_url: str, depth: int = 2, max_pages: int = 25) -> dict:
                     js_fetched = _fetch_with_retry(js_url, referer=url, max_bytes=1024 * 1024)
                     if js_fetched and js_fetched.get("open"):
                         js_text = js_fetched.get("text", "")
-                        for raw, source in _extract_js_urls(js_text):
+                        for raw, source in _deep_mine_js(js_text):
                             resolved = _resolve(js_url, raw)
                             if not resolved or resolved in seen_resources:
                                 continue
