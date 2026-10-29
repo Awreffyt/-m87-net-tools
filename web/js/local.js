@@ -220,6 +220,71 @@
     return p / v.length;
   }
 
+  /* HTML 实体解码（&#104; / &#x68;） */
+  function htmlEntityDecode(s) {
+    return String(s)
+      .replace(/&#x([0-9a-fA-F]+);/g, (m, h) => String.fromCharCode(parseInt(h, 16)))
+      .replace(/&#(\d+);/g, (m, d) => String.fromCharCode(parseInt(d, 10)));
+  }
+
+  /* String.fromCharCode(104,116,...) 还原 */
+  function fromCharCodeDecode(text) {
+    return String(text).replace(/String\.fromCharCode\s*\(\s*([0-9,\s]+?)\s*\)/g, (m, args) => {
+      try {
+        const codes = args.split(',').map((v) => parseInt(v.trim(), 10)).filter((n) => !Number.isNaN(n));
+        if (!codes.length) return m;
+        return JSON.stringify(String.fromCharCode.apply(null, codes));
+      } catch (e) { return m; }
+    });
+  }
+
+  /* Base32 解码 */
+  function base32Decode(s) {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    const clean = String(s).toUpperCase().replace(/=+/g, '').replace(/\s/g, '');
+    let bits = 0;
+    let value = 0;
+    let out = '';
+    for (let i = 0; i < clean.length; i += 1) {
+      const idx = alphabet.indexOf(clean[i]);
+      if (idx < 0) return '';
+      value = (value << 5) | idx;
+      bits += 5;
+      if (bits >= 8) {
+        out += String.fromCharCode((value >>> (bits - 8)) & 0xff);
+        bits -= 8;
+      }
+    }
+    return out;
+  }
+
+  /* 还原 Obfuscator.io 式字符串数组：var _0xab12 = ['a','b']; _0xab12[0x2] */
+  function restoreStringArrays(text) {
+    if (!text) return text;
+    const dict = {};
+    const declRe = /(?:var|let|const)?\s*(_0x[a-fA-F0-9]{2,})\s*=\s*\[((?:(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\s*,?\s*)+)\]/g;
+    let m;
+    while ((m = declRe.exec(text)) !== null) {
+      const parts = m[2].match(/(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/g) || [];
+      if (parts.length < 2) continue;
+      dict[m[1]] = parts.map((p) => p.slice(1, -1));
+    }
+    const names = Object.keys(dict);
+    if (!names.length) return text;
+
+    let out = text;
+    names.forEach((name) => {
+      const safe = name.replace(/[$]/g, '\\$');
+      const useRe = new RegExp(safe + '\\s*\\[\\s*(?:0x([0-9a-fA-F]+)|(\\d+))\\s*\\]', 'g');
+      out = out.replace(useRe, (whole, hex, dec) => {
+        const idx = hex !== undefined ? parseInt(hex, 16) : parseInt(dec, 10);
+        const val = dict[name][idx];
+        return val === undefined ? whole : JSON.stringify(val);
+      });
+    });
+    return out;
+  }
+
   function rot13(s) {
     return s.replace(/[a-zA-Z]/g, (c) => {
       const base = c <= 'Z' ? 65 : 97;
@@ -227,7 +292,8 @@
     });
   }
 
-  function tryDecode(s) {
+  function tryDecode(s, depth) {
+    const level = depth || 0;
     const out = [];
     const seen = {};
     function push(v) {
@@ -269,6 +335,32 @@
     if (/[a-zA-Z]/.test(s)) {
       const r13 = rot13(s);
       if (new RegExp('^(?:' + PATH_RE_SRC + ')$', 'i').test(r13)) push(r13);
+    }
+
+    /* HTML 实体（&#104; / &#x68;） */
+    if (/&#(?:x[0-9a-fA-F]+|\d+);/.test(s)) {
+      try { push(htmlEntityDecode(s)); } catch (e) { /* 忽略 */ }
+    }
+
+    /* Base32 */
+    if (/^[A-Z2-7]{16,}={0,6}$/.test(t)) {
+      try {
+        const b32 = base32Decode(t);
+        if (b32) push(b32);
+      } catch (e) { /* 忽略 */ }
+    }
+
+    /* 反转字符串（混淆器常用 split('').reverse().join('')） */
+    if (t.length >= 8) {
+      const rev = t.split('').reverse().join('');
+      if (/^(https?:\/\/|\.{0,2}\/)/.test(rev)) push(rev);
+    }
+
+    /* 多层嵌套：对解出来的结果再解一层（最多 2 层） */
+    if (level < 2) {
+      out.slice().forEach((v) => {
+        tryDecode(v, level + 1).forEach((x) => push(x));
+      });
     }
     return out;
   }
@@ -327,7 +419,11 @@
 
   function deepMine(text, base, store) {
     if (!text) return;
-    const merged = mergeConcat(text);
+    /* 先还原混淆结构：字符串数组索引、fromCharCode、HTML 实体 */
+    let src = restoreStringArrays(text);
+    src = fromCharCodeDecode(src);
+    if (/&#(?:x[0-9a-fA-F]+|\d+);/.test(src)) src = htmlEntityDecode(src);
+    const merged = mergeConcat(src);
     let m;
 
     const re1 = /https?:\/\/[^\s"'`<>()\\]+/gi;
@@ -440,6 +536,37 @@
       const el = doc.querySelector(sel);
       return el ? (el.getAttribute('content') || '') : '';
     };
+    /* JSON-LD 结构化数据里的资源地址 */
+    doc.querySelectorAll('script[type="application/ld+json"]').forEach((el) => {
+      try {
+        const json = JSON.parse(el.textContent || '');
+        const walk = (node) => {
+          if (!node) return;
+          if (typeof node === 'string') {
+            if (/^(https?:\/\/|\.{0,2}\/)/.test(node)) collectInto(store, absUrl(node, base), 'json-ld');
+            return;
+          }
+          if (Array.isArray(node)) { node.forEach(walk); return; }
+          if (typeof node === 'object') Object.keys(node).forEach((k) => walk(node[k]));
+        };
+        walk(json);
+      } catch (e) { /* 忽略 */ }
+    });
+
+    /* og:video / twitter:player 等媒体地址 */
+    ['og:video', 'og:video:url', 'og:video:secure_url', 'og:audio', 'og:audio:url',
+      'twitter:player:stream'].forEach((prop) => {
+      const val = metaGet('meta[property="' + prop + '"]') || metaGet('meta[name="' + prop + '"]');
+      if (val) collectInto(store, absUrl(val, base), prop);
+    });
+
+    /* video/audio 懒加载 data-* 属性 */
+    doc.querySelectorAll('video, audio').forEach((el) => {
+      ['data-src', 'data-url', 'data-video', 'data-audio'].forEach((attr) => {
+        collectInto(store, absUrl(el.getAttribute(attr), base), 'data.media');
+      });
+    });
+
     const faviconItem = doc.querySelector('link[rel*="icon"][href]');
     const favicon = faviconItem ? (absUrl(faviconItem.getAttribute('href'), base) || '') : '';
     const ogImage = metaGet('meta[property="og:image"]') || metaGet('meta[name="twitter:image"]');
@@ -488,6 +615,28 @@
       inlineJs,
       html: includeHtml ? html.slice(0, 1200000) : undefined,
     };
+  }
+
+  /* 二级挖掘：跟进 CSS 文件，解析其中的 url() 与 @import */
+  async function enrichFromCss(store, limit) {
+    const styles = (store.styles || []).slice(0, limit || 8);
+    for (const item of styles) {
+      try {
+        const got = await fetchViaProxy(item.url, false);
+        if (typeof got.data !== 'string') continue;
+        const body = got.data;
+        (body.match(/url\(\s*['"]?([^'")]+)['"]?\s*\)/gi) || []).slice(0, 400).forEach((raw) => {
+          const clean = raw.replace(/^url\(\s*['"]?/i, '').replace(/['"]?\s*\)$/, '').trim();
+          collectInto(store, absUrl(clean, item.url), 'css.remote');
+        });
+        (body.match(/@import\s+(?:url\(?\s*)?['"][^'"]+['"]/gi) || []).forEach((raw) => {
+          const m = raw.match(/['"]([^'"]+)['"]/);
+          if (m) collectInto(store, absUrl(m[1], item.url), 'css.import');
+        });
+        deepMine(body.slice(0, 400000), item.url, store);
+      } catch (e) { /* 单个 CSS 失败不影响整体 */ }
+      await sleep(80);
+    }
   }
 
   /* ---------------------------------------------------------------- 探测 */
@@ -637,6 +786,11 @@
       throw err('请求失败：' + (e.message || '目标站点无响应'));
     }
     const parsedRes = parseHtmlResources(fetched.data, normalized, includeHtml !== false);
+    /* 二级挖掘：跟进 CSS，把 @import 与 url() 里的图片/字体也挖出来 */
+    await enrichFromCss(parsedRes.resources, 8);
+    const store = parsedRes.resources;
+    Object.keys(store).forEach((k) => { parsedRes.counts[k] = store[k].length; });
+    parsedRes.total = Object.keys(parsedRes.counts).reduce((sum, k) => sum + parsedRes.counts[k], 0);
 
     const page = Object.assign({
       input: raw,
