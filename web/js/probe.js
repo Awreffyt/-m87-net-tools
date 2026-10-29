@@ -149,7 +149,10 @@
     el.endpoints.innerHTML = `<div class="card-title">端点连通性</div>${endpointHtml}`;
 
     /* 安全响应头 */
-    const audit = security.items.map((item) => `
+    const audit = security.unavailable
+      ? `<div style="font-size:12px;color:var(--muted);line-height:1.6">${
+        esc(security.note || '当前环境无法读取跨域响应头，此项需后端服务')}</div>`
+      : security.items.map((item) => `
       <div class="audit-row">
         <span class="ind ${item.present ? 'ok' : 'no'}"></span>
         <span class="label">${esc(item.label)}</span>
@@ -157,12 +160,12 @@
           item.present ? esc(item.value || '已配置') : '缺失'}</span>
       </div>`).join('');
     el.security.innerHTML = `<div class="card-title">安全响应头
-      <span class="right">${security.passed || 0} / ${security.total || 0} 已配置</span></div>
-      <div class="audit-list">${audit}</div>`;
+      <span class="right">${security.unavailable ? '不可用' : `${security.passed || 0} / ${security.total || 0} 已配置`}</span></div>
+      ${security.unavailable ? audit : `<div class="audit-list">${audit}</div>`}`;
 
     /* 建议 */
     const hints = (data.hints || []).slice();
-    const missingMinor = security.items
+    const missingMinor = security.unavailable ? [] : security.items
       .filter((item) => !item.present && ['low', 'mid'].includes(item.level))
       .map((item) => item.label);
     if (!hints.length && missingMinor.length) {

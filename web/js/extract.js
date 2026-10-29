@@ -376,6 +376,15 @@
     }
     NS.setLoading(el.zip, true, '打包中...');
     try {
+      if (NS.localMode && NS.local) {
+        const blob = await NS.local.packZip(
+          items.map((item) => ({ url: item.url, category: item.category })),
+          (state.data.page && state.data.page.title) || 'resources'
+        );
+        NS.downloadBlob(blob, `resources-${Date.now()}.zip`);
+        NS.toast(`已打包 ${items.length} 个资源`);
+        return;
+      }
       const resp = await fetch('/api/tools/package', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

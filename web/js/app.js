@@ -13,6 +13,10 @@
   }
 
   function activate(name, updateHash) {
+    if (name === 'capture' && NS.localMode) {
+      NS.toast('抓包需要后端服务，纯前端模式不支持', true);
+      return;
+    }
     const tabs = NS.$$('#mainTabs .tab');
     const tab = tabs.find((item) => item.dataset.view === name);
     if (!tab) return;
@@ -35,6 +39,14 @@
     const pill = $('#serverPill');
     const text = $('#serverPillText');
     if (!pill || !text) return;
+    const docBtn = $('#apiDocBtn');
+    if (NS.localMode) {
+      if (docBtn) docBtn.style.display = 'none';
+      pill.classList.remove('err', 'warn');
+      pill.classList.add('ok');
+      text.textContent = '纯前端模式（无后端）';
+      return;
+    }
     try {
       const data = await NS.api('/api/status');
       pill.classList.remove('err', 'warn');
@@ -49,6 +61,7 @@
 
   function initModules() {
     [['probe', 'probe'], ['extract', 'extract'], ['dns', 'dns'], ['capture', 'capture']].forEach(([key]) => {
+      if (NS.localMode && key === 'capture') return;
       if (NS[key] && typeof NS[key].init === 'function') {
         try {
           NS[key].init();
@@ -76,7 +89,8 @@
     initModules();
 
     const hash = (location.hash || '').replace('#', '');
-    activate(['probe', 'extract', 'dns', 'capture'].includes(hash) ? hash : 'probe', false);
+    const allowed = NS.localMode ? ['probe', 'extract', 'dns'] : ['probe', 'extract', 'dns', 'capture'];
+    activate(allowed.includes(hash) ? hash : 'probe', false);
     requestAnimationFrame(() => {
       const active = $('#mainTabs .tab.active');
       if (active) moveInk(active);

@@ -17,6 +17,10 @@
   NS.ApiError = ApiError;
 
   NS.api = async function (path, options = {}) {
+    /* 静态托管（GitHub Pages）没有后端，改走浏览器内实现 */
+    if (NS.localMode && NS.local && typeof NS.local.localApi === 'function') {
+      return NS.local.localApi(path, options);
+    }
     const opts = Object.assign({ method: 'GET' }, options);
     const headers = Object.assign({}, opts.headers || {});
     if (opts.body !== undefined && opts.body !== null && typeof opts.body !== 'string') {
