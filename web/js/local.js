@@ -7,9 +7,9 @@
   /* ---------------------------------------------------------------- 常量 */
 
   const PROXIES = [
-    (u) => 'https://xmokyimajkzuvbzbyqqb.supabase.co/functions/v1/site-tools?action=fetch&url=' + encodeURIComponent(u),
     (u) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
     (u) => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
+    (u) => 'https://xmokyimajkzuvbzbyqqb.supabase.co/functions/v1/site-tools?action=fetch&url=' + encodeURIComponent(u),
     (u) => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
   ];
 
@@ -93,8 +93,9 @@
 
   /* ---------------------------------------------------------------- 代理抓取 */
 
-  /* 记住上次成功的代理，之后单发直连它；只有它挂了才重新竞速
-     —— 竞速会让每个请求翻倍打到代理站，并发一高就被限流，反而更慢 */
+  /* 顺序换代理，不做并发竞速：
+     并发竞速会让一次页面抓取瞬间打出几十个请求，代理站直接限流，反而全挂。
+     但会记住上次成功的代理，下次先试它，正常情况下每个资源只发一个请求。 */
   let preferredProxy = null;
 
   function tryProxy(mk, url, asBinary) {
@@ -104,13 +105,7 @@
     return fetch(mk(url), { signal: ctrl.signal, cache: 'no-store' })
       .then(async (resp) => {
         clearTimeout(timer);
-        if (!resp.ok) {
-          /* 目标本身返回错误（404/415 等）时不要判定代理失效，
-             否则每个探测路径都会重新竞速全部代理，越挖越慢 */
-          const e = new Error('HTTP ' + resp.status);
-          e.keepProxy = true;
-          throw e;
-        }
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = asBinary ? await resp.arrayBuffer() : await resp.text();
         const size = asBinary ? data.byteLength : data.length;
         if (size < 30) throw new Error('空内容');
@@ -123,26 +118,20 @@
   }
 
   async function fetchViaProxy(url, asBinary) {
-    if (preferredProxy !== null) {
-      try {
-        return await tryProxy(PROXIES[preferredProxy], url, asBinary);
-      } catch (e) {
-        if (!e.keepProxy) preferredProxy = null;
-        throw e;
-      }
-    }
     const errors = [];
-    const order = PROXIES.map((_, i) => i);
-    try {
-      const race = order.map((i) => tryProxy(PROXIES[i], url, asBinary).then((r) => {
-        r.idx = i;
-        return r;
-      }));
-      const win = await Promise.any(race);
-      preferredProxy = win.idx;
-      return win;
-    } catch (e) {
-      (e.errors || []).forEach((x) => errors.push(x.message));
+    const order = preferredProxy === null
+      ? PROXIES.map((_, i) => i)
+      : [preferredProxy].concat(PROXIES.map((_, i) => i).filter((i) => i !== preferredProxy));
+    /* 每个请求最多试 3 个代理：全试会拖很久，也不至于只认一个 */
+    for (let k = 0; k < order.length && k < 3; k += 1) {
+      const i = order[k];
+      try {
+        const got = await tryProxy(PROXIES[i], url, asBinary);
+        preferredProxy = i;
+        return got;
+      } catch (e) {
+        errors.push('#' + (i + 1) + ' ' + e.message);
+      }
     }
     throw err('代理全部失败（' + errors.join(' / ') + '）');
   }
@@ -782,7 +771,7 @@
         });
         deepMine(body.slice(0, 400000), item.url, store);
       } catch (e) { /* 单个 CSS 失败不影响整体 */ }
-    }, 4);
+    }, 2);
   }
 
   /* 二级挖掘：跟进外链 JS
@@ -806,7 +795,7 @@
         const smu = body.match(/\/\/[#@]\s*sourceMappingURL=(\S+)/);
         if (smu) collectInto(store, absUrl(smu[1], item.url), 'js.sourcemap');
       } catch (e) { /* 单个 JS 失败不影响整体 */ }
-    }, 4);
+    }, 2);
   }
 
   /* robots.txt：拿 Disallow 目录与 Sitemap 地址，这是隐藏路径最直接的线索 */
@@ -904,7 +893,7 @@
           });
         }
       } catch (e) { /* 不存在就跳过 */ }
-    }, 4);
+    }, 3);
     return out;
   }
 
@@ -1060,7 +1049,7 @@
     const origin = new URL(normalized).origin;
     const enrichJob = Promise.all([
       mineRobots(normalized, store),
-      enrichFromCss(store, 6).then(() => enrichFromScripts(store, 8)),
+      enrichFromCss(store, 5).then(() => enrichFromScripts(store, 6)),
       mineSitemap(origin + '/sitemap.xml', store, 200),
       probeExposed(normalized),
     ]).catch(() => null);
