@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="theme-color" content="#070a0f" />
 <title>M87 网络抓包工具</title>
-<link rel="stylesheet" href="./styles.css?v=2.4" />
+<link rel="stylesheet" href="./styles.css?v=2.6" />
 </head>
 <body>
 
@@ -155,6 +155,11 @@
       <div class="hero">
         <h2>资源提取</h2>
         <p>抓取页面并拆出图片、视频、音频、链接、脚本、样式、字体与内嵌框架。点「顺藤摸瓜」可递归抓取同域内链，并深挖 CSS / JS 里的隐藏资源，最后一键打包带走。</p>
+      </div>
+
+      <div id="localHint" class="extract-warning hidden" style="margin-bottom:12px">
+        当前是网页版，浏览器不允许网页直接读别站内容，所以抓不了。<br />
+        用 <b>M87 本地版</b>：下载压缩包 → 解压 → 双击「启动M87.bat」→ 浏览器自动打开 → 直接抓。不用注册账号。
       </div>
 
       <div class="search-row">
@@ -776,13 +781,13 @@
 
 <div class="toast" id="toast"><span class="t-dot"></span><span id="toastMsg"></span></div>
 
-<script src="./js/common.js?v=2.4"></script>
-<script src="./js/local.js?v=2.4"></script>
-<script src="./js/probe.js?v=2.4"></script>
-<script src="./js/extract.js?v=2.4"></script>
-<script src="./js/dns.js?v=2.4"></script>
-<script src="./js/capture.js?v=2.4"></script>
-<script src="./js/app.js?v=2.4"></script>
-<script src="./js/cipher.js?v=2.4"></script>
+<script src="./js/common.js?v=2.6"></script>
+<script src="./js/local.js?v=2.6"></script>
+<script src="./js/probe.js?v=2.6"></script>
+<script src="./js/extract.js?v=2.6"></script>
+<script src="./js/dns.js?v=2.6"></script>
+<script src="./js/capture.js?v=2.6"></script>
+<script src="./js/app.js?v=2.6"></script>
+<script src="./js/cipher.js?v=2.6"></script>
 </body>
 </html>

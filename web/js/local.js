@@ -6,12 +6,12 @@
 
   /* ---------------------------------------------------------------- 常量 */
 
-  const PROXIES = [
-    (u) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
-    (u) => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
-    (u) => 'https://xmokyimajkzuvbzbyqqb.supabase.co/functions/v1/site-tools?action=fetch&url=' + encodeURIComponent(u),
-    (u) => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
-  ];
+  /* 不再使用任何第三方 CORS 代理。
+     跨站抓取一律交给自己电脑上的 M87 本地服务（m87.py）：
+     页面与接口同源，服务端去抓目标站，没有 CORS、没有限流、没有第三方。 */
+  const BACKEND_FETCH = '/api/fetch';
+  const BACKEND_CHECK = '/api/check';
+  const NO_BACKEND_HINT = '网页版受浏览器同源策略限制，抓不到别站内容。请用「M87 本地版」：下载压缩包 → 解压 → 双击「启动M87.bat」，浏览器会自动打开，再回来抓同一个网址。';
 
   const DOH_RESOLVERS = {
     alidns: ['https://dns.alidns.com/resolve', '阿里 DNS (223.5.5.5)'],
@@ -39,7 +39,7 @@
 
   const NON_HTML_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|ico|woff2?|ttf|otf|eot|css|js|mp4|webm|ogg|mp3|wav|m4a|m4v|pdf|zip|gz|rar|7z|exe|apk|dmg|docx?|xlsx?|pptx?|tar)(\?|$)/i;
 
-  const TIMEOUT = 9000;
+  const FETCH_TIMEOUT = 25000;
 
   /* ---------------------------------------------------------------- 基础工具 */
 
@@ -91,54 +91,81 @@
     await Promise.all(runners);
   }
 
-  /* ---------------------------------------------------------------- 代理抓取 */
+  /* ---------------------------------------------------------------- 抓取 */
 
-  /* 顺序换代理，不做并发竞速：
-     并发竞速会让一次页面抓取瞬间打出几十个请求，代理站直接限流，反而全挂。
-     但会记住上次成功的代理，下次先试它，正常情况下每个资源只发一个请求。 */
-  let preferredProxy = null;
+  /* 检测本地服务是否在跑：一次性，结果缓存到本次页面生命周期 */
+  let backendState = null;
+  function backendOnline() {
+    if (backendState) return backendState;
+    backendState = fetch('/api/status', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => !!(d && d.mode === 'm87-local'))
+      .catch(() => false);
+    return backendState;
+  }
 
-  function tryProxy(mk, url, asBinary) {
+  function backendFetch(url, asBinary) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
+    const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
     const started = performance.now();
-    return fetch(mk(url), { signal: ctrl.signal, cache: 'no-store' })
+    const target = BACKEND_FETCH + '?url=' + encodeURIComponent(url) + (asBinary ? '&bin=1' : '');
+    return fetch(target, { signal: ctrl.signal, cache: 'no-store' })
       .then(async (resp) => {
         clearTimeout(timer);
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        if (!resp.ok) {
+          let detail = '';
+          try {
+            const j = await resp.json();
+            detail = j && j.error ? '：' + j.error : '';
+          } catch (e) { detail = ''; }
+          throw new Error('抓取失败 HTTP ' + resp.status + detail);
+        }
         const data = asBinary ? await resp.arrayBuffer() : await resp.text();
         const size = asBinary ? data.byteLength : data.length;
         if (size < 30) throw new Error('空内容');
-        return { data, size, ms: Math.round(performance.now() - started) };
+        return { data, size, ms: Math.round(performance.now() - started), via: 'local' };
       })
       .catch((e) => {
         clearTimeout(timer);
-        throw (e && e.name === 'AbortError' ? new Error('超时') : e);
+        throw (e && e.name === 'AbortError' ? new Error('超时（目标站响应太慢）') : e);
       });
   }
 
   async function fetchViaProxy(url, asBinary) {
-    const errors = [];
-    const order = preferredProxy === null
-      ? PROXIES.map((_, i) => i)
-      : [preferredProxy].concat(PROXIES.map((_, i) => i).filter((i) => i !== preferredProxy));
-    /* 每个请求最多试 3 个代理：全试会拖很久，也不至于只认一个 */
-    for (let k = 0; k < order.length && k < 3; k += 1) {
-      const i = order[k];
-      try {
-        const got = await tryProxy(PROXIES[i], url, asBinary);
-        preferredProxy = i;
-        return got;
-      } catch (e) {
-        errors.push('#' + (i + 1) + ' ' + e.message);
-      }
-    }
-    throw err('代理全部失败（' + errors.join(' / ') + '）');
+    if (await backendOnline()) return backendFetch(url, asBinary);
+    throw err(NO_BACKEND_HINT);
   }
 
-  /* 判断目标 http/https 是否可达：opaque 请求只要不抛错即视为连通 */
+  /* 判断目标 http/https 是否可达：
+     有本地服务时由它去连（能拿到状态码、响应头、重定向链）；
+     没有时退回浏览器 opaque 请求（只能知道通不通）。 */
   async function reachable(url) {
     const started = performance.now();
+    if (await backendOnline()) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
+      try {
+        const resp = await fetch(BACKEND_CHECK + '?url=' + encodeURIComponent(url), { signal: ctrl.signal, cache: 'no-store' });
+        clearTimeout(timer);
+        const d = await resp.json();
+        if (!d || !d.open) {
+          return { open: false, ms: (d && d.ms) || Math.round(performance.now() - started), error: (d && d.error) || '无法连接' };
+        }
+        return {
+          open: true,
+          ms: d.ms || Math.round(performance.now() - started),
+          status: d.status || 0,
+          finalUrl: d.finalUrl || url,
+          contentType: d.contentType || '',
+          server: d.server || '',
+          headers: d.headers || {},
+          chain: d.chain || [],
+        };
+      } catch (e) {
+        clearTimeout(timer);
+        return { open: false, ms: Math.round(performance.now() - started), error: '本地服务无响应，请确认 M87 窗口还开着' };
+      }
+    }
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 8000);
@@ -933,7 +960,6 @@
       fetchViaProxy(httpsUrl, false).catch(() => null),
     ]);
 
-    const redirectChain = [];
     let pageData = null;
     if (pageFetch) {
       try {
@@ -946,13 +972,13 @@
       return {
         open: true,
         url,
-        finalUrl: url,
-        status: 0,
+        finalUrl: reach.finalUrl || url,
+        status: reach.status || 0,
         latency: reach.ms,
         size: pageFetch && pageData ? pageFetch.size : 0,
-        contentType: pageData ? 'text/html' : '',
-        server: '',
-        redirectChain,
+        contentType: reach.contentType || (pageData ? 'text/html' : ''),
+        server: reach.server || '',
+        redirectChain: reach.chain || [],
         isHtml: !!pageData,
       };
     };
@@ -960,20 +986,25 @@
     const httpsResult = mkEndpoint(httpsReach, httpsUrl);
     const httpResult = mkEndpoint(httpReach, httpUrl);
 
-    /* 纯前端拿不到响应头，安全头如实标记为不可用 */
+    /* 有本地服务时能读到真实响应头；没有就如实标记不可用 */
+    const hdrs = (httpsReach.open && httpsReach.headers) || (httpReach.open && httpReach.headers) || {};
+    const hasHeaders = Object.keys(hdrs).length > 0;
+    const secItems = SECURITY_HEADERS.map(([key, label, level]) => ({
+      key, label, level,
+      present: !!hdrs[key],
+      value: hdrs[key] || '',
+    }));
     const security = {
-      unavailable: true,
-      items: SECURITY_HEADERS.map(([key, label, level]) => ({
-        key, label, level, present: false, value: '',
-      })),
-      passed: 0,
-      total: SECURITY_HEADERS.length,
-      note: '浏览器无法读取跨域响应头，此项需后端服务',
+      unavailable: !hasHeaders,
+      items: secItems,
+      passed: secItems.filter((x) => x.present).length,
+      total: secItems.length,
+      note: hasHeaders ? '' : '浏览器读不到跨站响应头，此项需要本地服务',
     };
 
     const tls = {
       available: false,
-      error: '浏览器不暴露 TLS 证书信息，此项需后端服务',
+      error: '证书详情可在浏览器地址栏点击锁形图标查看',
     };
 
     let score = 0;
@@ -983,11 +1014,12 @@
     if (httpsReach.open) score += 25;
     else hints.push('HTTPS 访问失败，站点可能只支持 HTTP，存在安全风险。');
     if (httpReach.open) score += 5;
-    if (httpsReach.open && httpReach.open && !redirectChain.length) {
+    if (hasHeaders) score += Math.round(30 * (security.passed / security.total));
+    if (httpsReach.open && httpReach.open && !(httpsReach.chain || []).length) {
       hints.push('HTTP 可以直接访问且未强制跳转 HTTPS，建议 301 重定向到 HTTPS。');
     }
-    hints.push('纯前端模式无法检测 TLS 证书与安全响应头，评分上限受限（满分 50）。');
-    if (!pageFetch) hints.push('未能通过代理取得页面正文，站点可能拒绝代理访问。');
+    if (!hasHeaders) hints.push('还没连上本地服务，安全响应头读不到，评分上限受限（满分 50）。');
+    if (!pageFetch) hints.push('未能取得页面正文，站点可能拒绝了抓取请求。');
 
     const grade = score >= 90 ? '优秀' : score >= 75 ? '良好' : score >= 60 ? '一般' : '待改进';
 
@@ -1010,8 +1042,8 @@
         preferredProtocol: httpsReach.open ? 'https' : (httpReach.open ? 'http' : '-'),
         score: Math.max(0, Math.min(100, score)),
         grade,
-        server: '',
-        finalUrl: httpsReach.open ? httpsUrl : httpUrl,
+        server: httpsResult.server || httpResult.server || '',
+        finalUrl: httpsResult.finalUrl || httpResult.finalUrl || httpsUrl,
       },
       hints,
       page: pageData ? pageData.page : null,
@@ -1274,31 +1306,56 @@
 
   async function packZip(items, title) {
     const list = (items || []).slice(0, 60);
-    const files = [];
-    const index = [];
+    const index = ['URL\t分类\t文件名\t状态'];
 
-    index.push('URL\t分类\t文件名\t状态');
+    const online = await backendOnline();
+    const tasks = [];
+    const seen = {};
 
-    for (const item of list) {
-      const name = item.filename || filenameOf(item.url) || 'file';
-      const folder = (item.category || 'links') + '/';
-      const entryName = folder + name;
-      /* 内联资源不需要再请求，直接把内容写进包 */
+    list.forEach((item) => {
+      let name = item.filename || filenameOf(item.url) || 'file';
+      let entryName = (item.category || 'links') + '/' + name;
+      if (seen[entryName]) {
+        seen[entryName] += 1;
+        const dot = name.lastIndexOf('.');
+        const renamed = dot > 0
+          ? name.slice(0, dot) + '-' + seen[entryName] + name.slice(dot)
+          : name + '-' + seen[entryName];
+        entryName = (item.category || 'links') + '/' + renamed;
+      } else {
+        seen[entryName] = 1;
+      }
+      const slot = { item, entryName, ok: false };
       if (item.inline) {
-        const data = item.mime ? base64ToBytes(item.inline) : item.inline;
-        files.push({ name: entryName, data: data });
-        index.push(item.url + '\t' + (item.category || '') + '\t' + entryName + '\t成功（内联）');
-        continue;
+        slot.data = item.mime ? base64ToBytes(item.inline) : item.inline;
+        slot.ok = true;
+        slot.inline = true;
       }
+      tasks.push(slot);
+    });
+
+    /* 本地服务稳定，可以并发下载；内联资源直接进包，不用再请求 */
+    await pool(tasks.filter((t) => !t.ok), async (t) => {
       try {
-        const got = await fetchViaProxy(item.url, true);
-        files.push({ name: entryName, data: got.data });
-        index.push(item.url + '\t' + (item.category || '') + '\t' + entryName + '\t成功');
+        const got = await fetchViaProxy(t.item.url, true);
+        t.data = got.data;
+        t.ok = true;
       } catch (e) {
-        index.push(item.url + '\t' + (item.category || '') + '\t-\t失败：' + (e.message || '代理拒绝'));
+        t.ok = false;
+        t.reason = e.message || '抓取失败';
       }
-      await sleep(60);
-    }
+    }, online ? 4 : 2);
+
+    const files = [];
+    tasks.forEach((t) => {
+      if (t.ok) {
+        files.push({ name: t.entryName, data: t.data });
+        index.push(t.item.url + '\t' + (t.item.category || '') + '\t' + t.entryName
+          + '\t' + (t.inline ? '成功（内联）' : '成功'));
+      } else {
+        index.push(t.item.url + '\t' + (t.item.category || '') + '\t-\t失败：' + (t.reason || '未知'));
+      }
+    });
 
     files.unshift({
       name: '资源清单.txt',
@@ -1341,9 +1398,17 @@
     throw err('该功能需要后端服务（纯前端模式不支持抓包/会话类接口）');
   }
 
-  NS.localMode = /\.github\.io$/.test(location.hostname)
-    || location.search.indexOf('local=1') >= 0
-    || location.protocol === 'file:';
+  /* 这份前端只有两种落点：GitHub Pages（静态）或 m87.py 本机服务。
+     两种情况都没有 /api/tools/* 后端，解析一律在浏览器内完成，
+     需要联网时走同源 /api/fetch。所以固定为本地模式。 */
+  NS.localMode = true;
+
+  /* 没有本地服务时，在资源提取页顶部提示怎么用本地版 */
+  backendOnline().then((on) => {
+    if (on) return;
+    const hint = document.getElementById('localHint');
+    if (hint) hint.classList.remove('hidden');
+  });
 
   NS.local = {
     probe,
