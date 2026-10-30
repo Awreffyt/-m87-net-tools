@@ -840,3 +840,50 @@ a { color: var(--accent); text-decoration: none; }
   .filter-row .quick-chips { display: none; }
   .res-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
+
+
+/* ---- 密码破解面板（并入主站） ---- */
+/* 本页专用样式，全部 cx- 前缀，不与主站样式冲突 */
+body { overflow: hidden; }
+.cx-main { flex: 1; overflow-y: auto; max-width: 1080px; margin: 0 auto; padding: 18px 20px 80px; width: 100%; }
+.cx-hero { margin: 6px 0 18px; }
+.cx-hero h2 { font-size: 22px; margin: 0 0 6px; }
+.cx-hero p { color: var(--muted); font-size: 13px; line-height: 1.7; max-width: 760px; }
+.cx-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 20px; }
+.cx-tab { border: 1px solid var(--line-2); background: var(--panel); color: var(--muted);
+  padding: 8px 16px; border-radius: 10px; font-size: 13px; cursor: pointer; transition: all .15s; }
+.cx-tab:hover { background: var(--panel-2); color: var(--text); }
+.cx-tab.active { background: rgba(56,189,248,.12); border-color: rgba(56,189,248,.5); color: var(--accent); }
+.cx-panel { display: none; }
+.cx-panel.active { display: block; }
+.cx-card { border: 1px solid var(--line); background: var(--panel); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+.cx-card h3 { margin: 0 0 4px; font-size: 15px; }
+.cx-card .cx-sub { color: var(--muted); font-size: 12px; margin-bottom: 12px; line-height: 1.6; }
+.cx-field { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.cx-field label { font-size: 12.5px; color: var(--muted); min-width: 64px; }
+.cx-field select, .cx-field input[type="text"], .cx-field input[type="number"] {
+  background: var(--bg-2); border: 1px solid var(--line-2); color: var(--text);
+  border-radius: 9px; padding: 7px 10px; font-size: 13px; outline: none; }
+.cx-field select:focus, .cx-field input:focus { border-color: rgba(56,189,248,.6); }
+textarea.cx-input { width: 100%; min-height: 110px; resize: vertical; box-sizing: border-box;
+  background: var(--bg-2); border: 1px solid var(--line-2); color: var(--text);
+  border-radius: 10px; padding: 10px 12px; font-family: var(--mono); font-size: 13px; line-height: 1.6; outline: none; }
+textarea.cx-input:focus { border-color: rgba(56,189,248,.6); }
+.cx-out { width: 100%; box-sizing: border-box; background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 10px; padding: 12px; font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+  color: var(--green); white-space: pre-wrap; word-break: break-all; max-height: 420px; overflow: auto; }
+.cx-out.err { color: var(--red); }
+.cx-out.dim { color: var(--muted); }
+.cx-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.cx-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.cx-table th { text-align: left; color: var(--dim); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.cx-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; word-break: break-all; }
+.cx-table tr:hover td { background: rgba(255,255,255,.025); }
+.cx-score { color: var(--green); font-family: var(--mono); }
+.cx-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
+  border: 1px solid rgba(56,189,248,.4); color: var(--accent); margin-right: 6px; }
+.cx-note { border-left: 3px solid rgba(251,191,36,.6); background: rgba(251,191,36,.06); padding: 9px 12px;
+  border-radius: 0 8px 8px 0; font-size: 12.5px; color: #e8d9b0; line-height: 1.7; margin-bottom: 14px; }
+.cx-steps .cx-step { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.cx-steps .cx-step-head { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: var(--dim); }
+.cx-empty { color: var(--dim); font-size: 12.5px; padding: 14px; text-align: center; }

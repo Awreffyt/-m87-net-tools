@@ -89,7 +89,9 @@
     initModules();
 
     const hash = (location.hash || '').replace('#', '');
-    const allowed = NS.localMode ? ['probe', 'extract', 'dns'] : ['probe', 'extract', 'dns', 'capture'];
+    const allowed = NS.localMode
+      ? ['probe', 'extract', 'dns', 'cipher']
+      : ['probe', 'extract', 'dns', 'capture', 'cipher'];
     activate(allowed.includes(hash) ? hash : 'probe', false);
     requestAnimationFrame(() => {
       const active = $('#mainTabs .tab.active');
