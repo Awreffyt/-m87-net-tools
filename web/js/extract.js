@@ -15,6 +15,7 @@
     { key: 'styles', label: '样式', tag: 'CSS' },
     { key: 'fonts', label: '字体', tag: 'FONT' },
     { key: 'iframes', label: '内嵌框架', tag: 'FRAME' },
+    { key: 'inline', label: '内联代码', tag: 'CODE' },
   ];
 
   const el = {};
@@ -159,6 +160,7 @@
     styles: '<path d="M4 4h16v16H4z"/><path d="M4 9h16M9 9v11"/>',
     fonts: '<path d="M4 19h16M12 5v14M6 5h12"/>',
     iframes: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>',
+    inline: '<path d="M9 6L4 12l5 6M15 6l5 6-5 6"/><path d="M13 4l-3 16"/>',
   };
 
   function thumbCard(item, checked) {
@@ -180,9 +182,21 @@
     </div>`;
   }
 
+  function formatSize(n) {
+    if (!n) return '0 B';
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1048576).toFixed(2) + ' MB';
+  }
+
   function rowCard(item, checked) {
     const cat = CATS.find((c) => c.key === item.category) || { tag: '?' };
     const icon = ICONS[item.category] || '<circle cx="12" cy="12" r="8"/>';
+    const isInline = !!item.inline;
+    const meta = isInline ? `内联资源 · ${formatSize(item.size)} · 无需再请求` : item.url;
+    const tools = isInline
+      ? '<button data-act="download-inline">下载文件</button><button data-act="copy-inline">复制内容</button>'
+      : '<button data-act="open">打开</button><button data-act="copy">复制</button>';
     return `<div class="res-row" data-url="${esc(item.url)}">
       <input type="checkbox" class="row-check" data-url="${esc(item.url)}" ${checked ? 'checked' : ''}
         style="accent-color:var(--accent);width:13px;height:13px;flex-shrink:0" />
@@ -190,12 +204,9 @@
         stroke-linecap="round" stroke-linejoin="round">${icon}</svg></div>
       <div class="txt">
         <div class="name">${esc(item.filename)} <span style="color:var(--dim);font-size:10px">${esc(cat.tag)}</span></div>
-        <div class="url" title="${esc(item.url)}">${esc(item.url)}</div>
+        <div class="url" title="${esc(meta)}">${esc(meta)}</div>
       </div>
-      <div class="res-tools">
-        <button data-act="open">打开</button>
-        <button data-act="copy">复制</button>
-      </div>
+      <div class="res-tools">${tools}</div>
     </div>`;
   }
 
@@ -413,7 +424,13 @@
     try {
       if (NS.localMode && NS.local) {
         const blob = await NS.local.packZip(
-          items.map((item) => ({ url: item.url, category: item.category })),
+          items.map((item) => ({
+            url: item.url,
+            filename: item.filename,
+            category: item.category,
+            inline: item.inline,
+            mime: item.mime,
+          })),
           (state.data.page && state.data.page.title) || 'resources'
         );
         NS.downloadBlob(blob, `resources-${Date.now()}.zip`);
@@ -523,6 +540,30 @@
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+      } else if (act === 'download-inline' || act === 'copy-inline') {
+        const item = flatten().find((x) => x.url === url);
+        if (!item || !item.inline) return;
+        if (act === 'copy-inline') {
+          const ok = await NS.copyText(item.inline);
+          NS.toast(ok ? '内容已复制' : '复制失败', !ok);
+          return;
+        }
+        let blob;
+        if (item.mime) {
+          const bin = atob(item.inline);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+          blob = new Blob([bytes], { type: item.mime });
+        } else {
+          blob = new Blob([item.inline], { type: 'text/plain;charset=utf-8' });
+        }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = item.filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(a.href), 3000);
       }
     });
 

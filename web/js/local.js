@@ -511,7 +511,7 @@
       if (resolved) base = resolved;
     }
 
-    const store = { images: [], videos: [], audios: [], links: [], scripts: [], styles: [], fonts: [], iframes: [] };
+    const store = { images: [], videos: [], audios: [], links: [], scripts: [], styles: [], fonts: [], iframes: [], inline: [] };
 
     doc.querySelectorAll('img').forEach((el) => {
       collectInto(store, absUrl(el.getAttribute('src'), base), 'img');
@@ -594,9 +594,51 @@
       collectInto(store, absUrl(clean, base), 'css.url');
     });
 
-    /* 内联脚本 + 整页正文深度挖掘 */
+    /* 内联资源：单文件应用（H5、小工具、打包后的页面）的代码与素材全在 HTML 里，
+       以前只认外链 <script src>，导致这类页面「只能抓到音频和链接」 */
+    const pushInline = (name, content, source, mime) => {
+      if (!content || !name) return;
+      if (store.inline.some((x) => x.filename === name)) return;
+      store.inline.push({
+        url: 'inline://' + name,
+        filename: name,
+        host: 'inline',
+        source: source,
+        inline: content,
+        mime: mime || '',
+        size: content.length,
+      });
+    };
+
     let inlineJs = '';
-    doc.querySelectorAll('script:not([src])').forEach((el) => { inlineJs += (el.textContent || '') + '\n'; });
+    doc.querySelectorAll('script:not([src])').forEach((el, i) => {
+      const code = el.textContent || '';
+      inlineJs += code + '\n';
+      const type = (el.getAttribute('type') || '').toLowerCase();
+      if (type && !/javascript|ecmascript|module|json/.test(type)) return;
+      if (code.trim().length < 160) return;
+      const id = el.id ? el.id.replace(/[^\w.-]/g, '_') : 's' + (i + 1);
+      pushInline('inline-' + id + (type.indexOf('json') >= 0 ? '.json' : '.js'), code, 'inline.script');
+    });
+
+    doc.querySelectorAll('style').forEach((el, i) => {
+      const code = el.textContent || '';
+      if (code.trim().length < 160) return;
+      pushInline('inline-style-' + (i + 1) + '.css', code, 'inline.style');
+    });
+
+    /* 内联 data: URI 素材（base64 直接焊在 HTML 或 CSS 里） */
+    const dataRe = /data:(image|audio|video|font)\/([a-z0-9.+-]+);base64,([A-Za-z0-9+/=]{200,})/gi;
+    let dm;
+    let dataCount = 0;
+    const dataScanTargets = cssText + '\n' + html.slice(0, 3000000);
+    while ((dm = dataRe.exec(dataScanTargets)) !== null && dataCount < 40) {
+      const kind = dm[1];
+      const ext = dm[2].toLowerCase().replace('svg+xml', 'svg').replace('jpeg', 'jpg').replace('x-icon', 'ico');
+      dataCount += 1;
+      pushInline('data-' + dataCount + '-' + kind + '.' + ext, dm[3], 'inline.data', kind + '/' + dm[2]);
+    }
+
     if (inlineJs) deepMine(inlineJs, base, store);
     if (doc.body) deepMine(doc.body.innerHTML || '', base, store);
 
@@ -1075,7 +1117,7 @@
     const queue = [{ url: normalized, level: 1 }];
     const visited = new Set([normalized]);
     const pages = [];
-    const all = { images: [], videos: [], audios: [], links: [], scripts: [], styles: [], fonts: [], iframes: [] };
+    const all = { images: [], videos: [], audios: [], links: [], scripts: [], styles: [], fonts: [], iframes: [], inline: [] };
     const seenAll = new Set();
 
     while (queue.length && pages.length < limitPages) {
@@ -1146,6 +1188,13 @@
   }
 
   /* ---------------------------------------------------------------- 打包（纯前端 ZIP） */
+
+  function base64ToBytes(b64) {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+    return out;
+  }
 
   function crc32(bytes) {
     let table = crc32.table;
@@ -1242,9 +1291,16 @@
     index.push('URL\t分类\t文件名\t状态');
 
     for (const item of list) {
-      const name = filenameOf(item.url) || 'file';
+      const name = item.filename || filenameOf(item.url) || 'file';
       const folder = (item.category || 'links') + '/';
-      let entryName = folder + name;
+      const entryName = folder + name;
+      /* 内联资源不需要再请求，直接把内容写进包 */
+      if (item.inline) {
+        const data = item.mime ? base64ToBytes(item.inline) : item.inline;
+        files.push({ name: entryName, data: data });
+        index.push(item.url + '\t' + (item.category || '') + '\t' + entryName + '\t成功（内联）');
+        continue;
+      }
       try {
         const got = await fetchViaProxy(item.url, true);
         files.push({ name: entryName, data: got.data });
