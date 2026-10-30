@@ -66,6 +66,12 @@
     el.deepPages = $('#deepPages');
     el.deepPageCount = $('#deepPageCount');
     el.deepPagesList = $('#deepPagesList');
+    el.expTotal = $('#expTotal');
+    el.exposedMeta = $('#exposedMeta');
+    el.exposedList = $('#exposedList');
+    el.exposedCopy = $('#exposedCopy');
+    el.robotsBlock = $('#robotsBlock');
+    el.robotsList = $('#robotsList');
   }
 
   function setError(message) {
@@ -229,6 +235,7 @@
     renderResources();
     renderSource();
     renderDeepPages();
+    renderExposed();
   }
 
   function renderDeepPages() {
@@ -242,6 +249,34 @@
         .join('');
     } else {
       el.deepPages.classList.add('hidden');
+    }
+  }
+
+  function renderExposed() {
+    if (!state.data || !el.exposedList) return;
+    const items = state.data.exposed || [];
+    const robots = state.data.robotsDisallow || [];
+    el.expTotal.textContent = items.length;
+    el.exposedMeta.textContent = items.length
+      ? `命中 ${items.length} 项，建议立即确认并处置`
+      : '已探测 16 个常见泄露路径，全部未命中';
+    el.exposedList.innerHTML = items.length
+      ? items.map((it) => `
+        <div class="exposed-row">
+          <div class="exposed-head">
+            <span class="exposed-path">/${esc(it.path)}</span>
+            <span class="exposed-size">${it.size >= 1024 ? (it.size / 1024).toFixed(1) + ' KB' : it.size + ' B'}</span>
+            <a class="exposed-open" href="${esc(it.url)}" target="_blank" rel="noopener">打开</a>
+          </div>
+          <div class="exposed-desc">${esc(it.desc)}</div>
+          <div class="exposed-preview">${esc(it.preview)}</div>
+        </div>`).join('')
+      : '<div class="exposed-empty">没有发现暴露的备份、配置文件或源码目录。</div>';
+    if (robots.length) {
+      el.robotsBlock.classList.remove('hidden');
+      el.robotsList.innerHTML = robots.map((p) => `<span class="robot-chip">${esc(p)}</span>`).join('');
+    } else {
+      el.robotsBlock.classList.add('hidden');
     }
   }
 
@@ -533,6 +568,15 @@
     });
 
     el.zip.addEventListener('click', pack);
+
+    if (el.exposedCopy) {
+      el.exposedCopy.addEventListener('click', async () => {
+        const items = (state.data && state.data.exposed) || [];
+        if (!items.length) return NS.toast('没有可复制的地址', true);
+        const ok = await NS.copyText(items.map((x) => x.url).join('\n'));
+        NS.toast(ok ? `已复制 ${items.length} 条地址` : '复制失败', !ok);
+      });
+    }
 
     el.sourceCopy.addEventListener('click', async () => {
       const ok = await NS.copyText(state.data ? state.data.html || '' : '');

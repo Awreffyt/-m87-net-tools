@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="theme-color" content="#070a0f" />
 <title>M87 网络抓包工具</title>
-<link rel="stylesheet" href="./styles.css?v=2.0" />
+<link rel="stylesheet" href="./styles.css?v=2.2" />
 </head>
 <body>
 
@@ -187,6 +187,8 @@
           <p>输入页面地址后，服务端会抓取页面并解析出八类资源，相对路径会自动补全为完整地址。</p>
           <p>勾选需要的资源，点击「打包 ZIP」，浏览器会下载一个包含全部文件的压缩包。</p>
           <p><b>顺藤摸瓜</b>：从入口页出发，按选定深度递归抓取同域内链的所有页面，同时解析每个页面的 CSS 与 JS，把里面引用的图片、字体、接口等隐藏资源一并挖出。适合对付懒加载、CSS 背景图、JS 动态拼接路径等场景。</p>
+          <p><b>深度挖掘</b>：除了 HTML 本身，还会跟进外链 CSS 与 JS，从源码里还原被混淆或拼接的资源路径；同时解析内联 JSON 数据块（Next.js 的 __NEXT_DATA__、importmap）、robots.txt 里的屏蔽目录与 sitemap.xml。</p>
+          <p><b>暴露探测</b>：额外探测 16 个常见的泄露路径（.env、.git/config、backup.zip、db.sql、.DS_Store 等），用来发现被误放到公网的配置、备份与源码目录。</p>
           <p>页面预览是静态快照，脚本与外部交互已禁用，只用于查看结构。</p>
         </div>
       </details>
@@ -232,6 +234,7 @@
 
         <div class="sub-tabs" id="extractTabs">
           <button class="sub-tab active" data-tab="resources">资源 <span class="num" id="resTotal">0</span></button>
+          <button class="sub-tab" data-tab="exposed">暴露探测 <span class="num" id="expTotal">0</span></button>
           <button class="sub-tab" data-tab="source">源码</button>
           <button class="sub-tab" data-tab="preview">页面预览</button>
         </div>
@@ -252,6 +255,19 @@
             <button class="ghost-btn" id="resZip" style="color:#7dd3fc;border-color:rgba(56,189,248,.4)">打包 ZIP</button>
           </div>
           <div id="resourceList"></div>
+        </div>
+
+        <div class="sub-panel" id="extract-exposed">
+          <div class="res-toolbar">
+            <span class="meta" id="exposedMeta">未发现暴露文件</span>
+            <div class="spacer"></div>
+            <button class="ghost-btn" id="exposedCopy">复制地址</button>
+          </div>
+          <div id="exposedList"></div>
+          <div id="robotsBlock" class="hidden">
+            <div class="exposed-sub">robots.txt 中被屏蔽的路径</div>
+            <div id="robotsList" class="robots-list"></div>
+          </div>
         </div>
 
         <div class="sub-panel" id="extract-source">
@@ -760,13 +776,13 @@
 
 <div class="toast" id="toast"><span class="t-dot"></span><span id="toastMsg"></span></div>
 
-<script src="./js/common.js?v=2.0"></script>
-<script src="./js/local.js?v=2.0"></script>
-<script src="./js/probe.js?v=2.0"></script>
-<script src="./js/extract.js?v=2.0"></script>
-<script src="./js/dns.js?v=2.0"></script>
-<script src="./js/capture.js?v=2.0"></script>
-<script src="./js/app.js?v=2.0"></script>
+<script src="./js/common.js?v=2.2"></script>
+<script src="./js/local.js?v=2.2"></script>
+<script src="./js/probe.js?v=2.2"></script>
+<script src="./js/extract.js?v=2.2"></script>
+<script src="./js/dns.js?v=2.2"></script>
+<script src="./js/capture.js?v=2.2"></script>
+<script src="./js/app.js?v=2.2"></script>
 <script src="./js/cipher.js?v=2.1"></script>
 </body>
 </html>

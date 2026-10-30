@@ -39,7 +39,7 @@
 
   const NON_HTML_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|ico|woff2?|ttf|otf|eot|css|js|mp4|webm|ogg|mp3|wav|m4a|m4v|pdf|zip|gz|rar|7z|exe|apk|dmg|docx?|xlsx?|pptx?|tar)(\?|$)/i;
 
-  const TIMEOUT = 16000;
+  const TIMEOUT = 9000;
 
   /* ---------------------------------------------------------------- 基础工具 */
 
@@ -74,28 +74,77 @@
 
   function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
+  /* 有限并发池：比串行快几倍，又不会一次打爆代理 */
+  async function pool(list, worker, size) {
+    let cursor = 0;
+    const width = Math.min(size || 4, list.length);
+    const runners = [];
+    for (let i = 0; i < width; i += 1) {
+      runners.push((async () => {
+        while (cursor < list.length) {
+          const idx = cursor;
+          cursor += 1;
+          await worker(list[idx], idx);
+        }
+      })());
+    }
+    await Promise.all(runners);
+  }
+
   /* ---------------------------------------------------------------- 代理抓取 */
 
-  async function fetchViaProxy(url, asBinary) {
-    let lastErr = '';
-    for (let i = 0; i < PROXIES.length; i += 1) {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
-      const started = performance.now();
-      try {
-        const resp = await fetch(PROXIES[i](url), { signal: ctrl.signal, cache: 'no-store' });
+  /* 记住上次成功的代理，之后单发直连它；只有它挂了才重新竞速
+     —— 竞速会让每个请求翻倍打到代理站，并发一高就被限流，反而更慢 */
+  let preferredProxy = null;
+
+  function tryProxy(mk, url, asBinary) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
+    const started = performance.now();
+    return fetch(mk(url), { signal: ctrl.signal, cache: 'no-store' })
+      .then(async (resp) => {
         clearTimeout(timer);
-        if (!resp.ok) { lastErr = 'HTTP ' + resp.status; continue; }
+        if (!resp.ok) {
+          /* 目标本身返回错误（404/415 等）时不要判定代理失效，
+             否则每个探测路径都会重新竞速全部代理，越挖越慢 */
+          const e = new Error('HTTP ' + resp.status);
+          e.keepProxy = true;
+          throw e;
+        }
         const data = asBinary ? await resp.arrayBuffer() : await resp.text();
         const size = asBinary ? data.byteLength : data.length;
-        if (size < 30) { lastErr = '空内容'; continue; }
-        return { data, size, ms: Math.round(performance.now() - started), proxy: i };
-      } catch (e) {
+        if (size < 30) throw new Error('空内容');
+        return { data, size, ms: Math.round(performance.now() - started) };
+      })
+      .catch((e) => {
         clearTimeout(timer);
-        lastErr = e && e.name === 'AbortError' ? '超时' : (e.message || '请求失败');
+        throw (e && e.name === 'AbortError' ? new Error('超时') : e);
+      });
+  }
+
+  async function fetchViaProxy(url, asBinary) {
+    if (preferredProxy !== null) {
+      try {
+        return await tryProxy(PROXIES[preferredProxy], url, asBinary);
+      } catch (e) {
+        if (!e.keepProxy) preferredProxy = null;
+        throw e;
       }
     }
-    throw err('代理全部失败（' + lastErr + '）');
+    const errors = [];
+    const order = PROXIES.map((_, i) => i);
+    try {
+      const race = order.map((i) => tryProxy(PROXIES[i], url, asBinary).then((r) => {
+        r.idx = i;
+        return r;
+      }));
+      const win = await Promise.any(race);
+      preferredProxy = win.idx;
+      return win;
+    } catch (e) {
+      (e.errors || []).forEach((x) => errors.push(x.message));
+    }
+    throw err('代理全部失败（' + errors.join(' / ') + '）');
   }
 
   /* 判断目标 http/https 是否可达：opaque 请求只要不抛错即视为连通 */
@@ -487,9 +536,38 @@
         else if (as === 'style') collectInto(store, href, 'preload.style');
         else collectInto(store, href, 'preload');
       } else if (rel.indexOf('manifest') >= 0) collectInto(store, href, 'manifest');
+      else if (/prefetch|alternate|mask-icon|apple-touch/.test(rel)) collectInto(store, href, 'link.' + rel.split(/\s+/)[0]);
     });
 
     doc.querySelectorAll('script[src]').forEach((el) => collectInto(store, absUrl(el.getAttribute('src'), base), 'script'));
+
+    /* 冷门但真实存在的资源容器：object / embed / track / 输入图像 / SVG 图像 */
+    doc.querySelectorAll('object[data]').forEach((el) => collectInto(store, absUrl(el.getAttribute('data'), base), 'object'));
+    doc.querySelectorAll('embed[src]').forEach((el) => collectInto(store, absUrl(el.getAttribute('src'), base), 'embed'));
+    doc.querySelectorAll('track[src]').forEach((el) => collectInto(store, absUrl(el.getAttribute('src'), base), 'track'));
+    doc.querySelectorAll('input[type="image"][src]').forEach((el) => collectInto(store, absUrl(el.getAttribute('src'), base), 'input.image'));
+    doc.querySelectorAll('image').forEach((el) => {
+      const href = el.getAttribute('href') || el.getAttribute('xlink:href');
+      collectInto(store, absUrl(href, base), 'svg.image');
+    });
+    doc.querySelectorAll('meta[itemprop="image"], meta[property="og:image:secure_url"], meta[name="msapplication-TileImage"], meta[name="twitter:image"]').forEach((el) => {
+      collectInto(store, absUrl(el.getAttribute('content'), base), 'meta.image');
+    });
+    /* picture 里的多分辨率候选 */
+    doc.querySelectorAll('source[srcset], source[data-srcset]').forEach((el) => {
+      const ss = el.getAttribute('srcset') || el.getAttribute('data-srcset');
+      if (ss) ss.split(',').forEach((part) => collectInto(store, absUrl(part.trim().split(/\s+/)[0], base), 'srcset'));
+    });
+    /* 任意带 data-bg / data-background / data-image 的元素（懒加载背景图） */
+    const bgAttrs = ['data-bg', 'data-background', 'data-background-image', 'data-image', 'data-poster'];
+    doc.querySelectorAll('[' + bgAttrs.join('],[') + ']').forEach((el) => {
+      bgAttrs.forEach((attr) => {
+        const val = el.getAttribute(attr);
+        if (!val) return;
+        const m = /url\(\s*['"]?([^'")]+)/i.exec(val);
+        collectInto(store, absUrl(m ? m[1] : val, base), attr);
+      });
+    });
 
     doc.querySelectorAll('video').forEach((el) => {
       collectInto(store, absUrl(el.getAttribute('src'), base), 'video');
@@ -551,6 +629,33 @@
         };
         walk(json);
       } catch (e) { /* 忽略 */ }
+    });
+
+    /* 内联 JSON 数据块：__NEXT_DATA__、Nuxt、importmap、speculationrules
+       —— Next.js / Nuxt 站点的图片、chunk、接口地址几乎全在这里 */
+    const jsonWalk = (node, source) => {
+      if (node === null || node === undefined) return;
+      if (typeof node === 'string') {
+        if (node.length > 3 && node.length < 400 && /^(https?:\/\/|\/|\.{1,2}\/)/.test(node)) {
+          collectInto(store, absUrl(node, base), source);
+        }
+        return;
+      }
+      if (Array.isArray(node)) { node.forEach((n) => jsonWalk(n, source)); return; }
+      if (typeof node === 'object') Object.keys(node).forEach((k) => jsonWalk(node[k], source));
+    };
+
+    doc.querySelectorAll('script[type="application/json"], script[id="__NEXT_DATA__"], script[type="importmap"], script[type="speculationrules"]').forEach((el) => {
+      const raw = (el.textContent || '').trim();
+      if (!raw || raw.length > 4000000) return;
+      try {
+        jsonWalk(JSON.parse(raw), 'json.inline');
+      } catch (e) {
+        /* 不严格时退化成路径扫描 */
+        (raw.match(/"(?:https?:\/\/|\/)[^"]{3,220}"/g) || []).slice(0, 600).forEach((h) => {
+          collectInto(store, absUrl(h.slice(1, -1), base), 'json.inline');
+        });
+      }
     });
 
     /* og:video / twitter:player 等媒体地址 */
@@ -620,10 +725,10 @@
   /* 二级挖掘：跟进 CSS 文件，解析其中的 url() 与 @import */
   async function enrichFromCss(store, limit) {
     const styles = (store.styles || []).slice(0, limit || 8);
-    for (const item of styles) {
+    await pool(styles, async (item) => {
       try {
         const got = await fetchViaProxy(item.url, false);
-        if (typeof got.data !== 'string') continue;
+        if (typeof got.data !== 'string') return;
         const body = got.data;
         (body.match(/url\(\s*['"]?([^'")]+)['"]?\s*\)/gi) || []).slice(0, 400).forEach((raw) => {
           const clean = raw.replace(/^url\(\s*['"]?/i, '').replace(/['"]?\s*\)$/, '').trim();
@@ -635,8 +740,130 @@
         });
         deepMine(body.slice(0, 400000), item.url, store);
       } catch (e) { /* 单个 CSS 失败不影响整体 */ }
-      await sleep(80);
+    }, 4);
+  }
+
+  /* 二级挖掘：跟进外链 JS
+     现代站点的图片、接口、chunk 路径大量写死在 JS 里，这块以前是纯盲区 */
+  async function enrichFromScripts(store, limit) {
+    const scripts = (store.scripts || []).slice(0, limit || 12);
+    await pool(scripts, async (item) => {
+      try {
+        const got = await fetchViaProxy(item.url, false);
+        if (typeof got.data !== 'string') return;
+        const body = got.data;
+        if (body.length > 4000000) return;
+        deepMine(body, item.url, store);
+        /* 动态 import() 与 new URL('...', import.meta.url)：webpack 分片的地道写法 */
+        const dyn = body.match(/(?:import\s*\(\s*|\bnew\s+URL\s*\(\s*)['"`][^'"`]+['"`]/g) || [];
+        dyn.slice(0, 400).forEach((raw) => {
+          const m = raw.match(/['"`]([^'"`]+)['"`]/);
+          if (m && m[1].length > 3) collectInto(store, absUrl(m[1], item.url), 'js.dynamic');
+        });
+        /* sourceMappingURL 泄露的源码包 */
+        const smu = body.match(/\/\/[#@]\s*sourceMappingURL=(\S+)/);
+        if (smu) collectInto(store, absUrl(smu[1], item.url), 'js.sourcemap');
+      } catch (e) { /* 单个 JS 失败不影响整体 */ }
+    }, 4);
+  }
+
+  /* robots.txt：拿 Disallow 目录与 Sitemap 地址，这是隐藏路径最直接的线索 */
+  async function mineRobots(baseUrl, store) {
+    let origin;
+    try { origin = new URL(baseUrl).origin; } catch (e) { return []; }
+    try {
+      const got = await fetchViaProxy(origin + '/robots.txt', false);
+      const body = typeof got.data === 'string' ? got.data : '';
+      if (!body || /<!doctype html|<html[\s>]/i.test(body.slice(0, 300))) return [];
+      const disallow = [];
+      const re = /^(?:disallow|allow)\s*:\s*(\S+)/gim;
+      let m;
+      while ((m = re.exec(body)) !== null) {
+        const p = m[1].trim();
+        if (!p || p === '/' || p === '*') continue;
+        disallow.push(p.charAt(0) === '/' ? p : '/' + p);
+        if (disallow.length >= 80) break;
+      }
+      (body.match(/^sitemap\s*:\s*(\S+)/gim) || []).slice(0, 5).forEach((line) => {
+        const u = line.replace(/^sitemap\s*:\s*/i, '').trim();
+        collectInto(store, absUrl(u, origin), 'robots.sitemap');
+      });
+      return disallow;
+    } catch (e) { return []; }
+  }
+
+  async function mineSitemap(url, store, limit) {
+    try {
+      const got = await fetchViaProxy(url, false);
+      const body = typeof got.data === 'string' ? got.data : '';
+      if (!body || /<!doctype html/i.test(body.slice(0, 200))) return 0;
+      const locs = body.match(/<loc>\s*([\s\S]*?)\s*<\/loc>/gi) || [];
+      locs.slice(0, limit || 200).forEach((raw) => {
+        const u = raw.replace(/<\/?loc>/gi, '').trim();
+        collectInto(store, absUrl(u, url), 'sitemap');
+      });
+      return locs.length;
+    } catch (e) { return 0; }
+  }
+
+  /* 暴露文件探测：直接砸门，看服务器有没有把备份、配置、源码目录放在公网 */
+  const EXPOSED_TARGETS = [
+    ['.env', '环境变量文件，常含数据库密码与 API Key'],
+    ['.git/config', 'Git 配置，配合 .git/ 可还原整站源码'],
+    ['.git/HEAD', 'Git 版本指针'],
+    ['backup.zip', '站点备份压缩包'],
+    ['www.zip', '整站源码包'],
+    ['db.sql', '数据库导出'],
+    ['dump.sql', '数据库导出'],
+    ['.DS_Store', 'macOS 目录索引，泄露真实文件名'],
+    ['package.json', '依赖清单，泄露技术栈与内部包名'],
+    ['composer.json', 'PHP 依赖清单'],
+    ['web.config', 'IIS 配置文件'],
+    ['.htaccess', 'Apache 重写规则'],
+    ['phpinfo.php', 'PHP 环境详情页'],
+    ['admin/', '后台入口'],
+    ['.svn/entries', 'SVN 元数据'],
+    ['.well-known/security.txt', '安全联系信息（出现属正常项）'],
+  ];
+
+  /* 代理拿不到状态码，只能靠内容特征判断是不是真文件（而不是 404 页 / SPA 兜底） */
+  function looksLikeRealFile(path, body, size) {
+    if (size < 20) return false;
+    const head = body.slice(0, 600);
+    if (/<!doctype html|<html[\s>]/i.test(head)) return false;
+    if (/^\s*<\?xml/i.test(head)) return false;
+    if (path.indexOf('.env') === 0) return /^[\w.-]+\s*=/m.test(body);
+    if (path.indexOf('.git') === 0) return /\[core\]|ref:\s*refs/i.test(body);
+    if (/\.sql$/.test(path)) return /CREATE TABLE|INSERT INTO/i.test(body);
+    if (path === 'package.json' || path === 'composer.json') {
+      try { return !!JSON.parse(body); } catch (e) { return false; }
     }
+    if (path === '.DS_Store') return body.indexOf('Bud1') === 0;
+    return true;
+  }
+
+  async function probeExposed(baseUrl) {
+    let origin;
+    try { origin = new URL(baseUrl).origin; } catch (e) { return []; }
+    const out = [];
+    await pool(EXPOSED_TARGETS, async (pair) => {
+      const path = pair[0];
+      const url = origin + '/' + path;
+      try {
+        const got = await fetchViaProxy(url, false);
+        const body = typeof got.data === 'string' ? got.data : '';
+        if (looksLikeRealFile(path, body, got.size)) {
+          out.push({
+            path: path,
+            url: url,
+            desc: pair[1],
+            size: got.size,
+            preview: body.slice(0, 140).replace(/\s+/g, ' '),
+          });
+        }
+      } catch (e) { /* 不存在就跳过 */ }
+    }, 4);
+    return out;
   }
 
   /* ---------------------------------------------------------------- 探测 */
@@ -786,9 +1013,25 @@
       throw err('请求失败：' + (e.message || '目标站点无响应'));
     }
     const parsedRes = parseHtmlResources(fetched.data, normalized, includeHtml !== false);
-    /* 二级挖掘：跟进 CSS，把 @import 与 url() 里的图片/字体也挖出来 */
-    await enrichFromCss(parsedRes.resources, 8);
     const store = parsedRes.resources;
+    /* 二级挖掘全部并发，但给整体设 18 秒预算：挖不完就用已有结果，不能让用户干等 */
+    const origin = new URL(normalized).origin;
+    const enrichJob = Promise.all([
+      mineRobots(normalized, store),
+      enrichFromCss(store, 6).then(() => enrichFromScripts(store, 8)),
+      mineSitemap(origin + '/sitemap.xml', store, 200),
+      probeExposed(normalized),
+    ]).catch(() => null);
+    let disallow = [];
+    let exposed = [];
+    const outcomes = await Promise.race([
+      enrichJob,
+      sleep(18000).then(() => null),
+    ]);
+    if (outcomes) {
+      disallow = outcomes[0];
+      exposed = outcomes[3];
+    }
     Object.keys(store).forEach((k) => { parsedRes.counts[k] = store[k].length; });
     parsedRes.total = Object.keys(parsedRes.counts).reduce((sum, k) => sum + parsedRes.counts[k], 0);
 
@@ -809,6 +1052,8 @@
       resources: parsedRes.resources,
       counts: parsedRes.counts,
       total: parsedRes.total,
+      exposed: exposed || [],
+      robotsDisallow: disallow || [],
       mode: 'local',
     };
     if (includeHtml !== false) {
@@ -877,6 +1122,9 @@
       }
       await sleep(150);
     }
+
+    /* 深挖完再统一跟进一次外链 JS，把每页里引用的隐藏路径挖出来 */
+    await enrichFromScripts(all, 15);
 
     const counts = {};
     Object.keys(all).forEach((k) => { counts[k] = all[k].length; });
