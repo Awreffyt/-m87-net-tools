@@ -186,6 +186,18 @@
         <button class="chip" data-url="www.python.org">www.python.org</button>
       </div>
 
+      <details class="help" id="pasteBox">
+        <summary>抓不到？把页面源码粘进来，一样全量解析</summary>
+        <div class="help-body">
+          <p>目标站拦代理时，用手机/电脑打开该页 → 全选复制源码（或保存为 HTML）→ 粘到下面。填上该页地址用于补全相对路径。</p>
+          <textarea id="pasteHtml" rows="5" placeholder="把页面 HTML 源码粘贴到这里" style="width:100%;background:#0a111b;border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;outline:none;font-family:var(--mono);font-size:12px;resize:vertical"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <input id="pasteBase" placeholder="该页地址，例如 https://example.com/page" autocomplete="off" spellcheck="false" style="flex:1;min-width:200px;background:#0a111b;border:1px solid var(--line-2);border-radius:10px;padding:9px 12px;outline:none;font-family:var(--mono);font-size:12px" />
+            <button class="primary-btn" id="pasteBtn">解析粘贴内容</button>
+          </div>
+        </div>
+      </details>
+
       <details class="help">
         <summary>第一次用？点这里看怎么打包资源</summary>
         <div class="help-body">
