@@ -19,7 +19,7 @@
     </div>
     <div class="brand-text">
       <h1>M87</h1>
-      <p>网络抓包与诊断工具</p>
+      <p id="brandSub">网络抓包与诊断工具</p>
     </div>
   </div>
   <div class="topbar-right">
@@ -193,7 +193,7 @@
           <p>勾选需要的资源，点击「打包 ZIP」，浏览器会下载一个包含全部文件的压缩包。</p>
           <p><b>顺藤摸瓜</b>：从入口页出发，按选定深度递归抓取同域内链的所有页面，同时解析每个页面的 CSS 与 JS，把里面引用的图片、字体、接口等隐藏资源一并挖出。适合对付懒加载、CSS 背景图、JS 动态拼接路径等场景。</p>
           <p><b>深度挖掘</b>：除了 HTML 本身，还会跟进外链 CSS 与 JS，从源码里还原被混淆或拼接的资源路径；同时解析内联 JSON 数据块（Next.js 的 __NEXT_DATA__、importmap）、robots.txt 里的屏蔽目录与 sitemap.xml。</p>
-          <p><b>暴露探测</b>：额外探测 16 个常见的泄露路径（.env、.git/config、backup.zip、db.sql、.DS_Store 等），用来发现被误放到公网的配置、备份与源码目录。</p>
+          <p><b>暴露探测</b>：额外探测上百个常见的泄露路径（.env、.git/config、backup.zip、db.sql、.DS_Store、server-status 等），用来发现被误放到公网的配置、备份与源码目录。</p>
           <p>页面预览是静态快照，脚本与外部交互已禁用，只用于查看结构。</p>
         </div>
       </details>
@@ -781,13 +781,20 @@
 
 <div class="toast" id="toast"><span class="t-dot"></span><span id="toastMsg"></span></div>
 
-<script src="./js/common.js?v=2.6"></script>
-<script src="./js/local.js?v=2.6"></script>
-<script src="./js/probe.js?v=2.6"></script>
-<script src="./js/extract.js?v=2.6"></script>
-<script src="./js/dns.js?v=2.6"></script>
-<script src="./js/capture.js?v=2.6"></script>
-<script src="./js/app.js?v=2.6"></script>
-<script src="./js/cipher.js?v=2.6"></script>
+<script src="./site.config.js"></script>
+<script>
+(function () {
+  var conf = window.M87_SITE || {};
+  var host = String(location.hostname || '').toLowerCase();
+  var site = (conf.hosts && conf.hosts[host]) || conf.default || { code: 'm87', name: 'M87', version: '1.0.0' };
+  window.M87 = window.M87 || {};
+  window.M87.site = site;
+  var sub = document.getElementById('brandSub');
+  if (sub) sub.textContent = site.name + ' · v' + site.version;
+  (conf.files || []).forEach(function (name) {
+    document.write('<script src="./js/' + name + '?v=' + site.version + '"><\/script>');
+  });
+})();
+</script>
 </body>
 </html>

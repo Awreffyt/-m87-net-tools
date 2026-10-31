@@ -9,3 +9,8 @@ data/sessions/*.json
 .DS_Store
 .idea/
 .vscode/
+node_modules/
+tools/
+web/js/local.js
+web/js/extract.js
+web/js/cipher.js
