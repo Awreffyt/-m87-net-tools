@@ -8,11 +8,13 @@
  * 版本号同时用于给脚本去缓存，改完记得把对应站的 version 调一下。
  */
 window.M87_SITE = {
-  default: { code: 'm87-main', name: 'M87 主站', version: '2.8.0' },
+  default: { code: 'm87-main', name: 'M87 主站', version: '2.9.0' },
+  /* 线上抓取后端（InfinityFree 上的 PHP 接口）。留空则只用同源本地服务。 */
+  backend: 'https://gggg.rf.gd/proxy.php',
   hosts: {
-    'awreffyt.github.io': { code: 'm87-main', name: 'M87 主站', version: '2.8.0' },
-    localhost: { code: 'm87-local', name: 'M87 本地版', version: '2.8.0' },
-    '127.0.0.1': { code: 'm87-local', name: 'M87 本地版', version: '2.8.0' },
+    'awreffyt.github.io': { code: 'm87-main', name: 'M87 主站', version: '2.9.0' },
+    localhost: { code: 'm87-local', name: 'M87 本地版', version: '2.9.0' },
+    '127.0.0.1': { code: 'm87-local', name: 'M87 本地版', version: '2.9.0' },
   },
   /* 加载顺序不能改：common 先于所有模块，app 最后 */
   files: [
