@@ -9,7 +9,7 @@
  */
 window.M87_SITE = {
   default: { code: 'm87-main', name: 'M87 主站', version: '2.9.0' },
-  /* 线上抓取后端（InfinityFree 上的 PHP 接口）。留空则只用同源本地服务。 */
+  /* 线上抓取后端：填了就用它（自有 PHP），没填或不可用则自动走公共转发。 */
   backend: 'https://gggg.rf.gd/proxy.php',
   hosts: {
     'awreffyt.github.io': { code: 'm87-main', name: 'M87 主站', version: '2.9.0' },
