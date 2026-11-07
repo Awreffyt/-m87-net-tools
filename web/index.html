@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#070a0f" />
 <title>M87 网络抓包工具</title>
 <link rel="stylesheet" href="./styles.css?v=2.7" />
-<link rel="preload" as="script" href="https://cdn.jsdelivr.net/gh/Awreffyt/-m87-net-tools@v2.9.20/web/js/m87.bundle.obf.js?v=2.9.20" crossorigin />
-<link rel="preload" as="script" href="./site.config.js?v=2.9.20" />
+<link rel="preload" as="script" href="https://cdn.jsdelivr.net/gh/Awreffyt/-m87-net-tools@v2.9.21/web/js/m87.bundle.obf.js?v=2.9.21" crossorigin />
+<link rel="preload" as="script" href="./site.config.js?v=2.9.21" />
 </head>
 <body>
 
@@ -803,7 +803,7 @@
     s.onerror = next;
     document.body.appendChild(s);
   }
-  load('./site.config.js?v=2.9.20', function () {
+  load('./site.config.js?v=2.9.21', function () {
     var conf = window.M87_SITE || {};
     var host = String(location.hostname || '').toLowerCase();
     var site = (conf.hosts && conf.hosts[host]) || conf.default || { code: 'm87', name: 'M87', version: '1.0.0' };
@@ -811,8 +811,8 @@
     window.M87.site = site;
     var sub = document.getElementById('brandSub');
     if (sub) sub.textContent = site.name + ' · v' + site.version;
-    var cdn = 'https://cdn.jsdelivr.net/gh/Awreffyt/-m87-net-tools@v2.9.20/web/js/m87.bundle.obf.js?v=2.9.20';
-    var local = './js/m87.bundle.obf.js?v=2.9.20';
+    var cdn = 'https://cdn.jsdelivr.net/gh/Awreffyt/-m87-net-tools@v2.9.21/web/js/m87.bundle.obf.js?v=2.9.21';
+    var local = './js/m87.bundle.obf.js?v=2.9.21';
     load(cdn, function () {
       if (window.NS) return;
       load(local, function () {
