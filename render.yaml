@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: m87-net-tools
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: ALLOW_PRIVATE_TARGETS
+        value: "0"
