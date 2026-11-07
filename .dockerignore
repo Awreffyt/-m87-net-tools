@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.venv/
+venv/
+data/sessions/*.pcap
+data/sessions/*.json
+*.log
+.DS_Store

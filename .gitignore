@@ -1,0 +1,37 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+data/sessions/*.pcap
+data/sessions/*.json
+*.log
+.DS_Store
+.idea/
+.vscode/
+node_modules/
+src/
+tools/
+web/js/local.js
+web/js/extract.js
+web/js/cipher.js
+web/js/common.js
+web/js/probe.js
+web/js/dns.js
+web/js/capture.js
+web/js/app.js
+
+# 本地核心启动器：含解密密钥，绝不入库
+m87.py
+
+# 解密密钥：只存在本地
+.m87_key
+.m87_key
+
+# 核心源码不入公开仓库
+app/
+backend/
+
+# 本地散落副本 / 备份口令
+/aeslite.py
+/.m87_backup_pass
