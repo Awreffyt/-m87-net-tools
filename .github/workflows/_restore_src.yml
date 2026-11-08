@@ -1,0 +1,53 @@
+name: _restore_src
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: restore
+        env:
+          M87_KEY_B64: ${{ secrets.M87_KEY_B64 }}
+        run: |
+          printf %s "$M87_KEY_B64" | base64 -d > /tmp/k
+          echo "key bytes: $(wc -c < /tmp/k)"
+          SRC=backups/m87-full-backup-2026-11-08.tar.xz.enc
+          ls -l "$SRC"
+          HEX=$(od -An -tx1 /tmp/k | tr -d ' \n')
+          B64=$(base64 -w0 /tmp/k)
+          K256=$(sha256sum /tmp/k | cut -d' ' -f1)
+          rm -rf /tmp/src && mkdir -p /tmp/src
+          ok=0
+          for CIPHER in aes-256-cbc aes-192-cbc aes-128-cbc; do
+            for KDF in "-pbkdf2" "-md sha256" ""; do
+              for PASS in "file:/tmp/k" "pass:$HEX" "pass:$B64" "pass:$K256" "env:M87_KEY_B64"; do
+                if [ "$ok" = "0" ]; then
+                  if openssl enc -d $CIPHER $KDF -in "$SRC" -out /tmp/t.tar.xz -pass "$PASS" 2>/dev/null; then
+                    if tar -tJf /tmp/t.tar.xz >/dev/null 2>&1; then
+                      echo "SUCCESS: $CIPHER $KDF [$PASS]"
+                      tar -xJf /tmp/t.tar.xz -C /tmp/src
+                      ok=1
+                    fi
+                  fi
+                fi
+              done
+            done
+          done
+          if [ "$ok" = "0" ]; then
+            echo "NO_MATCH: all combinations failed"
+          fi
+          echo "=== files ==="
+          find /tmp/src -type f | head -80
+          echo "=== count ==="
+          find /tmp/src -type f | wc -l
+          echo "=== js source ==="
+          ls -la /tmp/src/web/js 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m87-src
+          path: /tmp/src
+          retention-days: 1
