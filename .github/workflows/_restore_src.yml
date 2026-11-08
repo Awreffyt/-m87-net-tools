@@ -13,38 +13,77 @@ jobs:
           M87_KEY_B64: ${{ secrets.M87_KEY_B64 }}
         run: |
           printf %s "$M87_KEY_B64" | base64 -d > /tmp/k
-          echo "key bytes: $(wc -c < /tmp/k)"
-          SRC=backups/m87-full-backup-2026-11-08.tar.xz.enc
-          ls -l "$SRC"
-          HEX=$(od -An -tx1 /tmp/k | tr -d ' \n')
-          B64=$(base64 -w0 /tmp/k)
-          K256=$(sha256sum /tmp/k | cut -d' ' -f1)
-          rm -rf /tmp/src && mkdir -p /tmp/src
-          ok=0
-          for CIPHER in aes-256-cbc aes-192-cbc aes-128-cbc; do
-            for KDF in "-pbkdf2" "-md sha256" ""; do
-              for PASS in "file:/tmp/k" "pass:$HEX" "pass:$B64" "pass:$K256" "env:M87_KEY_B64"; do
-                if [ "$ok" = "0" ]; then
-                  if openssl enc -d $CIPHER $KDF -in "$SRC" -out /tmp/t.tar.xz -pass "$PASS" 2>/dev/null; then
-                    if tar -tJf /tmp/t.tar.xz >/dev/null 2>&1; then
-                      echo "SUCCESS: $CIPHER $KDF [$PASS]"
-                      tar -xJf /tmp/t.tar.xz -C /tmp/src
-                      ok=1
-                    fi
-                  fi
-                fi
-              done
-            done
-          done
-          if [ "$ok" = "0" ]; then
-            echo "NO_MATCH: all combinations failed"
+          python3 - <<'PY'
+          import hashlib, itertools, subprocess, os
+          k = open('/tmp/k','rb').read()
+          src = 'backups/m87-full-backup-2026-11-08.tar.xz.enc'
+          blob = open(src,'rb').read()
+          assert blob[:8] == b'Salted__'
+          salt = blob[8:16]
+          body = blob[16:]
+
+          def evp(passwd, salt, klen, ivlen, h=hashlib.md5):
+              d = b''; prev = b''
+              while len(d) < klen + ivlen:
+                  prev = h(prev + passwd + salt).digest()
+                  d += prev
+              return d[:klen], d[klen:klen+ivlen]
+
+          def pbkdf2(passwd, salt, klen, ivlen, iters, h=hashlib.sha256):
+              dk = hashlib.pbkdf2_hmac('sha256', passwd, salt, iters, klen+ivlen)
+              return dk[:klen], dk[klen:]
+
+          passes = [k, k.hex().encode(), k.hex().upper().encode(), k.rstrip(b'\n'),
+                    __import__('base64').b64encode(k),
+                    hashlib.sha256(k).digest(), hashlib.sha256(k).hexdigest().encode(),
+                    hashlib.md5(k).hexdigest().encode(), hashlib.sha512(k).digest(),
+                    k[:32], k[32:], b'm87', b'M87', b'm87-backup', b'm87_backup',
+                    b'20261108', b'm87@2026', b'M87@2026']
+          kdfs = []
+          for p in passes:
+              kdfs.append((p, 'evp-md5', lambda pw,s: evp(pw,s,32,16,hashlib.md5)))
+              kdfs.append((p, 'evp-sha256', lambda pw,s: evp(pw,s,32,16,hashlib.sha256)))
+              for it in (10000, 100000, 600000):
+                  kdfs.append((p, f'pbkdf2-{it}', (lambda it_=it: lambda pw,s: pbkdf2(pw,s,32,16,it_))(it)))
+          ciphers = {'aes-256-cbc': (32,16), 'aes-192-cbc': (24,16), 'aes-128-cbc': (16,16)}
+          magics = (b'\xfd7zXZ', b'\x1f\x8b', b'PK', b'BZh')
+
+          def try_one(pw, name, fn, cipher):
+              klen, ivlen = ciphers[cipher]
+              key, iv = fn(pw, salt)
+              r = subprocess.run(['openssl','enc','-d',f'-{cipher}','-K',key.hex(),'-iv',iv.hex()],
+                                 input=body, capture_output=True)
+              out = r.stdout
+              if out[:6] in magics or (len(out)>300 and out[257:262]==b'ustar'):
+                  return out
+              return None
+
+          n=0
+          for pw, name, fn in kdfs:
+              for cipher in ciphers:
+                  n+=1
+                  out = try_one(pw, name, fn, cipher)
+                  if out:
+                      pwdisp = pw[:6].hex() + ('...' if len(pw)>6 else '')
+                      print(f'SUCCESS kdf={name} cipher={cipher} pass={pwdisp} len={len(out)}')
+                      open('/tmp/t.bin','wb').write(out)
+                      raise SystemExit(0)
+          print(f'NO_MATCH after {n} combos')
+          PY
+          echo "=== identify ==="
+          file /tmp/t.bin 2>/dev/null || true
+          mkdir -p /tmp/src
+          if [ -f /tmp/t.bin ]; then
+            if file /tmp/t.bin | grep -qi "xz"; then cp /tmp/t.bin /tmp/t.tar.xz && tar -xJf /tmp/t.tar.xz -C /tmp/src;
+            elif file /tmp/t.bin | grep -qi "gzip"; then mv /tmp/t.bin /tmp/t.tar.gz && tar -xzf /tmp/t.tar.gz -C /tmp/src;
+            elif file /tmp/t.bin | grep -qi "tar"; then cp /tmp/t.bin /tmp/t.tar && tar -xf /tmp/t.tar -C /tmp/src;
+            elif file /tmp/t.bin | grep -qi "zip"; then cp /tmp/t.bin /tmp/t.zip && unzip -qo /tmp/t.zip -d /tmp/src;
+            fi
           fi
           echo "=== files ==="
-          find /tmp/src -type f | head -80
+          find /tmp/src -type f | head -60
           echo "=== count ==="
           find /tmp/src -type f | wc -l
-          echo "=== js source ==="
-          ls -la /tmp/src/web/js 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
