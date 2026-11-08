@@ -1,0 +1,22 @@
+name: snapshot
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: snapshot
+        env:
+          M87_KEY_B64: ${{ secrets.M87_KEY_B64 }}
+        run: python3 tools/snapshot.py
+      - name: commit
+        run: |
+          git config user.email "m87@actions.local"
+          git config user.name "m87-actions"
+          git add web/snapshots
+          git commit -m "snapshots: auto update" || true
+          git push
