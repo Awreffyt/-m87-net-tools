@@ -1,5 +1,8 @@
 name: snapshot
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
 permissions:
   contents: write
 jobs:
@@ -13,14 +16,31 @@ jobs:
         env:
           M87_KEY_B64: ${{ secrets.M87_KEY_B64 }}
         run: |
+          curl -s -m 20 'https://ptsv2.com/t/m87queue/posts' -o /tmp/q.json || true
+          python3 - <<'PY'
+          import re, os
+          urls = set()
+          try:
+              urls = set(re.findall(r"https?://[^\s\"'<>]+", open('/tmp/q.json', encoding='utf-8', errors='ignore').read()))
+          except Exception:
+              pass
+          p = 'snapshots.txt'
+          existing = set()
+          if os.path.exists(p):
+              existing = {l.strip() for l in open(p, encoding='utf-8') if l.strip()}
+          new = sorted(u for u in urls if u not in existing and len(u) < 300)
+          if new:
+              with open(p, 'a', encoding='utf-8') as f:
+                  f.write('\n' + '\n'.join(new) + '\n')
+              print('新增', len(new), '个待破解地址')
+          PY
           printf %s "$M87_KEY_B64" | base64 -d > .m87_key
-          wc -c .m87_key
           export M87_KEY="$PWD/.m87_key"
           python3 tools/snapshot.py
       - name: commit
         run: |
           git config user.email "m87@actions.local"
           git config user.name "m87-actions"
-          git add web/snapshots
+          git add web/snapshots snapshots.txt
           git commit -m "snapshots: auto update" || true
           git push
