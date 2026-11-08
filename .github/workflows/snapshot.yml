@@ -12,7 +12,11 @@ jobs:
       - name: snapshot
         env:
           M87_KEY_B64: ${{ secrets.M87_KEY_B64 }}
-        run: python3 tools/snapshot.py
+        run: |
+          printf %s "$M87_KEY_B64" | base64 -d > .m87_key
+          wc -c .m87_key
+          export M87_KEY="$PWD/.m87_key"
+          python3 tools/snapshot.py
       - name: commit
         run: |
           git config user.email "m87@actions.local"
