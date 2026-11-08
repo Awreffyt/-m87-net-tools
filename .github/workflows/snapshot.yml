@@ -2,7 +2,10 @@ name: snapshot
 on:
   workflow_dispatch:
   schedule:
+    # 多行错开：GitHub 对公共仓库的定时调度会积压降频，多行提高触发概率
     - cron: '*/15 * * * *'
+    - cron: '7,22,37,52 * * * *'
+    - cron: '11,26,41,56 * * * *'
 permissions:
   contents: write
 jobs:
