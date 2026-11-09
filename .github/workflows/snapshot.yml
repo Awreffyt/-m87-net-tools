@@ -78,6 +78,10 @@ jobs:
           PY
           printf %s "$M87_KEY_B64" | base64 -d > .m87_key
           export M87_KEY="$PWD/.m87_key"
+          # 核心启动器以密文入库，运行时用同一密钥解出，用完即弃（不入提交）
+          PASS=$(sha256sum .m87_key | cut -d' ' -f1)
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in assets/core.enc -out m87.py -pass pass:$PASS
+          [ -s m87.py ] || { echo '核心解密失败'; exit 2; }
           python3 tools/snapshot.py
       - name: commit
         run: |

@@ -21,8 +21,10 @@ web/js/dns.js
 web/js/capture.js
 web/js/app.js
 
-# 本地核心启动器：含解密密钥，绝不入库
+# 本地核心启动器：含解密密钥，绝不入库（仅入库密文 assets/core.enc）
 m87.py
+!assets/
+!assets/core.enc
 
 # 解密密钥：只存在本地
 .m87_key
