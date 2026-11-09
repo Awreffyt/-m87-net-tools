@@ -1,4 +1,4 @@
-/* © 2026 M87 · v2.9.27 辅助增强模块
+/* © 2026 M87 · v2.9.28 辅助增强模块
  * 功能：门禁站提交云端破解后，自动轮询快照，破解完成自动出结果。
  * 原版行为：提交队列后提示「请过几分钟重新点一次抓取」，需要用户手动重试。
  * 本模块：自动跟进，每 45 秒查一次快照，最多 20 次（约 15 分钟），
@@ -14,11 +14,11 @@
   var GAP_MS = 45000;
   var pollTimer = null;
   var pollCount = 0;
-  var missUrl = null;      // 最近一次 404 的快照地址（第一个，最接近规范形式）
+  var missList = [];       // 本次未命中尝试过的全部快照变体（规范化不同，hash 各异）
   var titleBase = null;
 
   function noteMiss(u) {
-    if (!missUrl && u && u.indexOf('/snapshots/') > -1) missUrl = u;
+    if (u && u.indexOf('/snapshots/') > -1 && missList.indexOf(u) < 0) missList.push(u);
   }
 
   /* ---- 网络监听：抓 404 快照 + 云端上报动作 ---- */
@@ -94,10 +94,12 @@
     pollCount++;
     var done = pollCount >= MAX_TRIES;
     var hit = false;
-    if (missUrl) {
-      /* 同步检查快照是否已生成 */
+    /* 逐个变体检查：云端快照按「保留 query 的规范形式」命名，
+     * 前端未命中时试过的任一变体命中即代表破解完成 */
+    for (var i = 0; i < missList.length && !hit; i++) {
+      var u = missList[i] + (missList[i].indexOf('?') > -1 ? '&' : '?') + 't=' + Date.now();
       var x = new XMLHttpRequest();
-      x.open('GET', missUrl + (missUrl.indexOf('?') > -1 ? '&' : '?') + 't=' + Date.now(), false);
+      x.open('GET', u, false);
       try { x.send(); hit = (x.status === 200 && (x.responseText || '').length > 500); } catch (e) {}
     }
     if (hit) {
@@ -114,6 +116,6 @@
   function stop() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     if (titleBase !== null) { document.title = titleBase; titleBase = null; }
-    missUrl = null;
+    missList = [];
   }
 })();
