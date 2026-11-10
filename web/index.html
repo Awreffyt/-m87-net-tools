@@ -6,9 +6,9 @@
 <meta name="theme-color" content="#070a0f" />
 <title>M87 网络抓包工具</title>
 <meta name="copyright" content="版权所有 (c) 2026 Awreffyt。保留所有权利。未经书面许可，禁止复制、修改、分发、反向工程。" />
-<link rel="stylesheet" href="./styles.css?v=2.9.39" />
-<link rel="preload" as="script" href="https://cdn.jsdelivr.net/gh/Awreffyt/-m87-net-tools@v2.9.39/web/js/m87.bundle.obf.js?v=2.9.39" crossorigin />
-<link rel="preload" as="script" href="./site.config.js?v=2.9.39" />
+<link rel="stylesheet" href="./styles.css?v=2.9.40" />
+<link rel="preload" as="script" href="https://cdn.jsdelivr.net/gh/Awreffyt/-m87-net-tools@v2.9.40/web/js/m87.bundle.obf.js?v=2.9.40" crossorigin />
+<link rel="preload" as="script" href="./site.config.js?v=2.9.40" />
 </head>
 <body>
 
@@ -806,7 +806,7 @@
     s.onerror = next;
     document.body.appendChild(s);
   }
-  load('./site.config.js?v=2.9.39', function () {
+  load('./site.config.js?v=2.9.40', function () {
     /* 清理早期版本的离线缓存：它会在链路抖动时回退旧外壳，
      * 造成「页面是新的、脚本是旧的」这种错配，直接注销并清空。 */
     if ('serviceWorker' in navigator) {
@@ -829,7 +829,7 @@
     var sub = document.getElementById('brandSub');
     if (sub) sub.textContent = site.name + ' · v' + site.version;
     /* 辅助增强：提交后自动轮询快照，命中即自动出结果。自包含，独立于主包加载。 */
-    load('./js/assist.js?v=2.9.39');
+    load('./js/assist.js?v=2.9.40');
     /* 双通道并发取包：同源与 jsDelivr 同时发起，谁先到谁生效。
      * 任一条挂起都不会拖住首屏；包内有一层一次性守卫，后到的副本自动退出，不会重复初始化。 */
     var settled = false;
@@ -841,10 +841,10 @@
     /* CDN 先行，600ms 内未就绪再补同源：
      * 实测同一个 400KB 包，Pages 直出 20~26 秒，jsDelivr 约 2 秒，
      * 所以把快的放前面，慢的那条只做兜底。 */
-    load('https://cdn.jsdelivr.net/gh/Awreffyt/-m87-net-tools@v2.9.39/web/js/m87.bundle.obf.js?v=2.9.39', ready);
+    load('https://cdn.jsdelivr.net/gh/Awreffyt/-m87-net-tools@v2.9.40/web/js/m87.bundle.obf.js?v=2.9.40', ready);
     setTimeout(function () {
       if (window.NS) return;
-      load('./js/m87.bundle.obf.js?v=2.9.39', ready);
+      load('./js/m87.bundle.obf.js?v=2.9.40', ready);
     }, 600);
   });
 })();

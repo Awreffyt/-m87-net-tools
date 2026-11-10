@@ -943,3 +943,76 @@ textarea.cx-input:focus { border-color: rgba(56,189,248,.6); }
 @media (max-width: 760px) {
   .res-play video { max-height: 56vh; object-fit: contain; }
 }
+
+/* ---------------- 站内预览层（图片/视频/音频） ---------------- */
+.ns-viewer {
+  position: fixed; inset: 0; z-index: 9999;
+  background: #04070c;
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  animation: nsViewerIn .16s ease-out;
+}
+@keyframes nsViewerIn { from { opacity: 0 } to { opacity: 1 } }
+.ns-viewer.out { opacity: 0; transition: opacity .18s ease-in; }
+.ns-viewer-bar {
+  display: flex; align-items: center; gap: 7px;
+  background: #070b11;
+  padding: 9px 12px calc(9px + 0px);
+  border-bottom: 1px solid rgba(255, 255, 255, .07);
+}
+.ns-viewer-name {
+  flex: 1; min-width: 0;
+  font-family: var(--mono); font-size: 11.5px; color: #9fb0c4;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ns-viewer-btn {
+  height: 30px; padding: 0 10px; border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  background: rgba(255, 255, 255, .06); color: #c9d1d9;
+  font-size: 11.5px; white-space: nowrap;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.ns-viewer-btn:active { background: rgba(255, 255, 255, .14); }
+.ns-viewer-x {
+  width: 32px; height: 32px; flex-shrink: 0;
+  border: 0; border-radius: 50%;
+  background: rgba(255, 255, 255, .1); color: #fff;
+  font-size: 17px; line-height: 1;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.ns-viewer-x:active { background: rgba(255, 255, 255, .22); }
+.ns-viewer-stage {
+  flex: 1; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 10px 12px calc(16px + env(safe-area-inset-bottom));
+  overflow: hidden;
+}
+.ns-viewer-stage img {
+  max-width: 100%; max-height: 100%;
+  object-fit: contain; border-radius: 8px;
+  background: #0a0f16;
+  outline: 1px solid rgba(255, 255, 255, .14);
+  box-shadow: 0 12px 44px rgba(0, 0, 0, .65);
+}
+.ns-viewer-stage video {
+  width: 100%; max-height: 100%;
+  border-radius: 8px; background: #000;
+}
+.ns-viewer-stage audio { width: 100%; }
+.ns-viewer-msg {
+  padding: 0 20px calc(26px + env(safe-area-inset-bottom));
+  color: #8b949e; font-size: 12px; line-height: 1.65; text-align: center;
+}
+body.viewer-open { overflow: hidden; }
+
+/* 移动端点按不再出现整块高亮/闪白 */
+@media (max-width: 760px) {
+  .res-card, .res-thumb, .res-row, .res-tools button,
+  .chip, .sub-tab, .tab, .ghost-btn, .primary-btn, .mini-select {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
+.ns-viewer-stage.failed { padding: 0 30px; }
+.ns-viewer-stage .ns-viewer-msg { padding: 0; }
