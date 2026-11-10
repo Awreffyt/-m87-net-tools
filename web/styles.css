@@ -231,14 +231,19 @@ a { color: var(--accent); text-decoration: none; }
 .ghost-btn:hover { color: var(--text); border-color: #35506f; background: var(--panel-2); }
 .ghost-btn.danger:hover { color: #fca5a5; border-color: rgba(248, 113, 113, .5); }
 .mini-select {
-  height: 46px; padding: 0 12px;
-  background: var(--panel); border: 1px solid var(--line-2);
+  height: 46px; padding: 0 30px 0 12px;
+  background-color: var(--panel); border: 1px solid var(--line-2);
   color: var(--text); border-radius: 12px;
   font-size: 12.5px; font-weight: 500;
   outline: 0; cursor: pointer;
-  transition: border-color .16s, background .16s;
+  transition: border-color .16s, background-color .16s;
+  /* iOS 上原生 select 会画白色系统外观，把文字压成白底白字 */
+  -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b9bb0' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
 }
-.mini-select:hover { border-color: #35506f; background: var(--panel-2); }
+.mini-select:hover { border-color: #35506f; background-color: var(--panel-2); }
 .mini-select:focus { border-color: rgba(167, 139, 250, .6); box-shadow: 0 0 0 3px rgba(167, 139, 250, .1); }
 .icon-btn {
   width: 30px; height: 30px; border-radius: 8px;
@@ -842,6 +847,10 @@ a { color: var(--accent); text-decoration: none; }
   .stats-grid-2 { grid-template-columns: 1fr; }
   .result-head { flex-wrap: wrap; }
   .result-actions { width: 100%; }
+  /* 页头卡片在窄屏换行：否则 actions 的 100% 宽会挤掉标题和 URL，
+     长 URL 会被压成一列竖排字 */
+  .page-card { flex-wrap: wrap; }
+  .page-card .result-actions { margin-left: 60px; }
 }
 @media (max-width: 700px) {
   .topbar { padding: 0 12px; }
