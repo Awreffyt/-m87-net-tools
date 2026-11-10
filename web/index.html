@@ -6,9 +6,9 @@
 <meta name="theme-color" content="#070a0f" />
 <title>M87 网络抓包工具</title>
 <meta name="copyright" content="版权所有 (c) 2026 Awreffyt。保留所有权利。未经书面许可，禁止复制、修改、分发、反向工程。" />
-<link rel="stylesheet" href="./styles.css?v=2.9.36" />
-<link rel="preload" as="script" href="./js/m87.bundle.obf.js?v=2.9.36" />
-<link rel="preload" as="script" href="./site.config.js?v=2.9.36" />
+<link rel="stylesheet" href="./styles.css?v=2.9.37" />
+<link rel="preload" as="script" href="./js/m87.bundle.obf.js?v=2.9.37" />
+<link rel="preload" as="script" href="./site.config.js?v=2.9.37" />
 </head>
 <body>
 
@@ -799,16 +799,26 @@
   function load(src, next) {
     var s = document.createElement('script');
     s.src = src;
-    s.async = false;
+    /* 必须并行：async=false 会让脚本按插入顺序排队执行，
+     * 先插入的那条一旦卡住，后面已经下载完的包也只能干等。 */
+    s.async = true;
     s.onload = next;
     s.onerror = next;
     document.body.appendChild(s);
   }
-  load('./site.config.js?v=2.9.36', function () {
-    /* 离线缓存：首次访问后把外壳存下来，下次链路再慢也能立即打开 */
+  load('./site.config.js?v=2.9.37', function () {
+    /* 清理早期版本的离线缓存：它会在链路抖动时回退旧外壳，
+     * 造成「页面是新的、脚本是旧的」这种错配，直接注销并清空。 */
     if ('serviceWorker' in navigator) {
       try {
-        navigator.serviceWorker.register('./sw.js?v=2.9.36').catch(function () {});
+        navigator.serviceWorker.getRegistrations().then(function (rs) {
+          rs.forEach(function (r) { r.unregister(); });
+        }).catch(function () {});
+        if (window.caches && caches.keys) {
+          caches.keys().then(function (keys) {
+            keys.forEach(function (k) { caches.delete(k); });
+          }).catch(function () {});
+        }
       } catch (e) {}
     }
     var conf = window.M87_SITE || {};
@@ -819,7 +829,7 @@
     var sub = document.getElementById('brandSub');
     if (sub) sub.textContent = site.name + ' · v' + site.version;
     /* 辅助增强：提交后自动轮询快照，命中即自动出结果。自包含，独立于主包加载。 */
-    load('./js/assist.js?v=2.9.36');
+    load('./js/assist.js?v=2.9.37');
     /* 双通道并发取包：同源与 jsDelivr 同时发起，谁先到谁生效。
      * 任一条挂起都不会拖住首屏；包内有一层一次性守卫，后到的副本自动退出，不会重复初始化。 */
     var settled = false;
@@ -828,8 +838,13 @@
       settled = true;
       if (!window.NS) console.error('M87 脚本加载失败');
     }
-    load('./js/m87.bundle.obf.js?v=2.9.36', ready);
-    load('https://cdn.jsdelivr.net/gh/Awreffyt/-m87-net-tools@v2.9.36/web/js/m87.bundle.obf.js?v=2.9.36', ready);
+    /* 同源先行，700ms 内未就绪再补 CDN：
+     * 正常情况只下一次包；同源卡住时，CDN 那路 1 秒左右就能顶上。 */
+    load('./js/m87.bundle.obf.js?v=2.9.37', ready);
+    setTimeout(function () {
+      if (window.NS) return;
+      load('https://cdn.jsdelivr.net/gh/Awreffyt/-m87-net-tools@v2.9.37/web/js/m87.bundle.obf.js?v=2.9.37', ready);
+    }, 700);
   });
 })();
 </script>
