@@ -1016,3 +1016,35 @@ body.viewer-open { overflow: hidden; }
 
 .ns-viewer-stage.failed { padding: 0 30px; }
 .ns-viewer-stage .ns-viewer-msg { padding: 0; }
+
+/* ---------------- 源码查看器 ---------------- */
+.ns-code-view .ns-viewer-bar { gap: 6px; }
+.ns-code-meta {
+  font-family: var(--mono); font-size: 10px; color: #6e7f92;
+  white-space: nowrap; flex-shrink: 0;
+}
+.ns-code-wrap {
+  flex: 1; min-height: 0;
+  display: flex; align-items: flex-start;
+  overflow: auto; background: #070b10;
+  -webkit-overflow-scrolling: touch;
+}
+.ns-gutter {
+  position: sticky; left: 0; z-index: 1;
+  margin: 0; padding: 12px 8px 44px 12px;
+  text-align: right; color: #3d4b5c;
+  font: 12px/1.6 var(--mono);
+  user-select: none; -webkit-user-select: none;
+  background: #070b10; border-right: 1px solid rgba(255, 255, 255, .06);
+  flex: 0 0 auto;
+}
+.ns-src {
+  margin: 0; padding: 12px 20px 44px 12px;
+  font: 12px/1.6 var(--mono);
+  color: #c9d1d9; white-space: pre; tab-size: 2;
+}
+.ns-code-state {
+  margin: auto; padding: 56px 28px;
+  color: #8b949e; font-size: 12.5px; line-height: 1.7; text-align: center;
+}
+.ns-code-state.failed { color: #c9a06a; }
