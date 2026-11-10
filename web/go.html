@@ -229,8 +229,8 @@
     cancelBtn.addEventListener('click', function () {
       stopped = true;
       clearInterval(ticker);
-      tEl.textContent = '· 已取消';
-      cancelBtn.textContent = '已停止自动跳转';
+      tEl.textContent = '';
+      cancelBtn.textContent = '自动跳转已关闭';
       cancelBtn.disabled = true;
     });
   }
