@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#070a0f" />
 <title>M87 网络抓包工具</title>
 <meta name="copyright" content="版权所有 (c) 2026 Awreffyt。保留所有权利。未经书面许可，禁止复制、修改、分发、反向工程。" />
-<link rel="stylesheet" href="./styles.css?v=2.9.34" />
+<link rel="stylesheet" href="./styles.css?v=2.9.35" />
 <link rel="preload" as="script" href="./js/m87.bundle.obf.js?v=2.9.34" />
 <link rel="preload" as="script" href="./site.config.js?v=2.9.34" />
 </head>
@@ -805,6 +805,12 @@
     document.body.appendChild(s);
   }
   load('./site.config.js?v=2.9.34', function () {
+    /* 离线缓存：首次访问后把外壳存下来，下次链路再慢也能立即打开 */
+    if ('serviceWorker' in navigator) {
+      try {
+        navigator.serviceWorker.register('./sw.js?v=2.9.35').catch(function () {});
+      } catch (e) {}
+    }
     var conf = window.M87_SITE || {};
     var host = String(location.hostname || '').toLowerCase();
     var site = (conf.hosts && conf.hosts[host]) || conf.default || { code: 'm87', name: 'M87', version: '1.0.0' };
