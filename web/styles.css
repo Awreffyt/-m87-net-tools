@@ -1135,3 +1135,25 @@ body.has-dbar .disclaimer { margin-bottom: 78px; }
   -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
 .disclaimer-bar .db-btn:active { background: rgba(255, 255, 255, .16); }
+
+/* ---------------- 门禁站：错误框里的两个动作按钮 ---------------- */
+.err-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.err-act {
+  padding: 6px 13px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.err-act:hover { border-color: var(--accent); background: var(--panel-3); }
+.err-act:active { transform: translateY(1px); }
