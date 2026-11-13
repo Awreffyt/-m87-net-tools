@@ -6,9 +6,9 @@
 <meta name="theme-color" content="#070a0f" />
 <title>M87 网络抓包工具</title>
 <meta name="copyright" content="版权所有 (c) 2026 Awreffyt。保留所有权利。未经书面许可，禁止复制、修改、分发、反向工程。" />
-<link rel="stylesheet" href="./styles.css?v=2.9.52" />
-<link rel="preload" as="script" href="https://cdn.jsdelivr.net/gh/Awreffyt/-m87-net-tools@v2.9.52/web/js/m87.bundle.obf.js?v=2.9.52" crossorigin />
-<link rel="preload" as="script" href="./site.config.js?v=2.9.52" />
+<link rel="stylesheet" href="./styles.css?v=2.9.53" />
+<link rel="preload" as="script" href="https://cdn.jsdelivr.net/gh/Awreffyt/-m87-net-tools@v2.9.53/web/js/m87.bundle.obf.js?v=2.9.53" crossorigin />
+<link rel="preload" as="script" href="./site.config.js?v=2.9.53" />
 </head>
 <body>
 
@@ -192,6 +192,8 @@
           <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
             <input id="pasteBase" placeholder="该页地址，例如 https://example.com/page" autocomplete="off" spellcheck="false" style="flex:1;min-width:200px;background:#0a111b;border:1px solid var(--line-2);border-radius:10px;padding:9px 12px;outline:none;font-family:var(--mono);font-size:12px" />
             <button class="primary-btn" id="pasteBtn">解析粘贴内容</button>
+            <button class="ghost-btn" id="pasteFileBtn" type="button" title="选择保存下来的 .html 文件">选文件</button>
+            <input id="pasteFile" type="file" accept=".html,.htm,.txt,text/html" hidden />
           </div>
         </div>
       </details>
@@ -866,7 +868,7 @@
     s.onerror = next;
     document.body.appendChild(s);
   }
-  load('./site.config.js?v=2.9.52', function () {
+  load('./site.config.js?v=2.9.53', function () {
     /* 清理早期版本的离线缓存：它会在链路抖动时回退旧外壳，
      * 造成「页面是新的、脚本是旧的」这种错配，直接注销并清空。 */
     if ('serviceWorker' in navigator) {
@@ -889,7 +891,7 @@
     var sub = document.getElementById('brandSub');
     if (sub) sub.textContent = site.name + ' · v' + site.version;
     /* 辅助增强：提交后自动轮询快照，命中即自动出结果。自包含，独立于主包加载。 */
-    load('./js/assist.js?v=2.9.52');
+    load('./js/assist.js?v=2.9.53');
     /* 双通道并发取包：同源与 jsDelivr 同时发起，谁先到谁生效。
      * 任一条挂起都不会拖住首屏；包内有一层一次性守卫，后到的副本自动退出，不会重复初始化。 */
     var settled = false;
@@ -901,10 +903,10 @@
     /* CDN 先行，600ms 内未就绪再补同源：
      * 实测同一个 400KB 包，Pages 直出 20~26 秒，jsDelivr 约 2 秒，
      * 所以把快的放前面，慢的那条只做兜底。 */
-    load('https://cdn.jsdelivr.net/gh/Awreffyt/-m87-net-tools@v2.9.52/web/js/m87.bundle.obf.js?v=2.9.52', ready);
+    load('https://cdn.jsdelivr.net/gh/Awreffyt/-m87-net-tools@v2.9.53/web/js/m87.bundle.obf.js?v=2.9.53', ready);
     setTimeout(function () {
       if (window.NS) return;
-      load('./js/m87.bundle.obf.js?v=2.9.52', ready);
+      load('./js/m87.bundle.obf.js?v=2.9.53', ready);
     }, 600);
   });
 })();

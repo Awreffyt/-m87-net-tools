@@ -283,6 +283,7 @@ a { color: var(--accent); text-decoration: none; }
   color: #fca5a5;
 }
 .alert.info { background: rgba(56, 189, 248, .08); border-color: rgba(56, 189, 248, .28); color: #93c5fd; }
+.alert.warn { background: rgba(251, 191, 36, .08); border-color: rgba(251, 191, 36, .26); color: #fcd34d; }
 
 .empty-state {
   margin-top: 26px; padding: 56px 20px;
