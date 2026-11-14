@@ -8,14 +8,14 @@
  * 版本号同时用于给脚本去缓存，改完记得把对应站的 version 调一下。
  */
 window.M87_SITE = {
-  default: { code: 'm87-main', name: 'M87 主站', version: '3.0.0' },
+  default: { code: 'm87-main', name: 'M87 主站', version: '3.1.0' },
   /* 线上抓取后端：填了就用它（自有 PHP 接口 web/m87-proxy.php），
      没填或不可用会自动落回公共通道，不会卡住。
      临时用法：在地址栏打开 index.html?backend=https://你的域名/m87-proxy.php
      打开一次就存进浏览器，之后不用再带参数。 */
   backend: '',
   hosts: {
-    'awreffyt.github.io': { code: 'm87-main', name: 'M87 主站', version: '3.0.0' },
+    'awreffyt.github.io': { code: 'm87-main', name: 'M87 主站', version: '3.1.0' },
     localhost: { code: 'm87-local', name: 'M87 本地版', version: '2.9.12' },
     '127.0.0.1': { code: 'm87-local', name: 'M87 本地版', version: '2.9.12' },
   },
